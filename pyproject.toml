@@ -1,0 +1,31 @@
+[build-system]
+requires = [
+    "setuptools>=80.9.0"
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "leaffliction"
+version = "1.0.0"
+authors = [
+    {name = "Cyril BATTISTOLO", email = "cybattis@student.42lyon.fr"},
+    {name = "Adel Lakhdar", email = "alakhdar@student.42lyon.fr"}
+]
+description = "Image classification by disease recognition on leaves"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "matplotlib",
+    "opencv-python",
+    "plantcv",
+    "scikit-learn",
+    "scikit-image"
+]
+
+[project.optional-dependencies]
+dev = [
+]
+
+[tool.setuptools]
+py-modules = []
