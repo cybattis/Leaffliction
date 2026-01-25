@@ -22,7 +22,7 @@ clean_project() {
     rm -rf .venv
 
     echo "🗑️  Removing build files (egg-info, build)..."
-    rm -rf build *.egg-info
+    rm -rf build ./*.egg-info
 
     echo "🗑️  Removing Python cache files (__pycache__, *.pyc)..."
     find . -type d -name "__pycache__" -exec rm -rf {} +
@@ -36,14 +36,14 @@ clean_project() {
 show_help() {
     # Using printf for aligned columns. The %-20s reserves 20 characters for the command string.
     printf "\n"
-    printf "${BLUE}Usage:${NC}\n"
+    printf "${BLUE}%s${NC}\n" "Usage:"
     printf "  %s [command]\n\n" "$0"
-    printf "${BLUE}Description:${NC}\n"
-    printf "  A script to manage the project's virtual environment and dependencies.\n\n"
-    printf "${BLUE}Available Commands:${NC}\n"
-    printf "  ${GREEN}install, -i${NC}   Sets up the environment and installs packages (default action).\n"
-    printf "  ${GREEN}clean,   -c${NC}   Deletes the virtual environment and build artifacts.\n"
-    printf "  ${GREEN}help,    -h${NC}   Displays this help message.\n"
+    printf "${BLUE}%s${NC}\n" "Description:"
+    printf "%s\n\n" "  A script to manage the project's virtual environment and dependencies."
+    printf "${BLUE}%s${NC}\n" "Available Commands:"
+    printf "${GREEN}%s${NC} %s\n" "  install, -i" " Sets up the environment and installs packages (default action)."
+    printf "${GREEN}%s${NC} %s\n" "  clean,   -c" " Deletes the virtual environment and build artifacts."
+    printf "${GREEN}%s${NC} %s\n" "  help,    -h" " Displays this help message."
     printf "\n"
 }
 
