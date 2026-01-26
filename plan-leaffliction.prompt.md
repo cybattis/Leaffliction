@@ -7,10 +7,10 @@ This plan outlines the steps to implement the Leaffliction project, which involv
 
 ### Part 1: Data Analysis
 - [x] Create `distribution.py`.
-- [ ] Implement directory traversal to find images.
-- [ ] analyze class distribution (Healthy vs Diseases).
-- [ ] Generate Pie Charts and Bar Charts using Matplotlib/Seaborn.
-- [ ] Ensure charts are correctly labeled with directory source.
+- [x] Implement directory traversal to find images.
+- [x] analyze class distribution (Healthy vs Diseases).
+- [x] Generate Pie Charts and Bar Charts using Matplotlib/Seaborn.
+- [x] Ensure charts are correctly labeled with directory source.
 
 ### Part 2: Data Augmentation
 - [x] Create `augmentation.py`.
