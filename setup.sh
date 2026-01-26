@@ -141,6 +141,8 @@ check_package_installation "plantcv"
 check_package_installation "sklearn"
 check_package_installation "skimage"
 check_package_installation "flake8"
+check_package_installation "tensorflow"
+check_package_installation "keras"
 
 echo "🔗 Checking for dependency conflicts..."
 if ! pip check &>/dev/null; then
