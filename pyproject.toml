@@ -15,16 +15,17 @@ description = "Image classification by disease recognition on leaves"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "numpy",
-    "matplotlib",
-    "opencv-python",
-    "plantcv",
-    "scikit-learn",
-    "scikit-image"
+    "numpy==2.2.6",
+    "matplotlib==3.10.8",
+    "opencv-python==4.13.0.90",
+    "plantcv==4.10.1",
+    "scikit-learn==1.7.2",
+    "scikit-image==0.25.2"
 ]
 
 [project.optional-dependencies]
 dev = [
+    "flake8==7.3.0",
 ]
 
 [tool.setuptools]
