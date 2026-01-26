@@ -20,7 +20,9 @@ dependencies = [
     "opencv-python==4.13.0.90",
     "plantcv==4.10.1",
     "scikit-learn==1.7.2",
-    "scikit-image==0.25.2"
+    "scikit-image==0.25.2",
+    "tensorflow==2.18.0",
+    "keras==3.8.0"
 ]
 
 [project.optional-dependencies]

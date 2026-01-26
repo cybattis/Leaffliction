@@ -16,7 +16,9 @@ The Leaffliction project is a computer vision application for plant disease clas
   - `opencv-python`: Computer vision operations
   - `numpy`: Numerical computations
   - `matplotlib`: Data visualization and plotting
-  - `scikit-learn`: Machine learning algorithms
+  - `tensorflow`: Deep learning framework
+  - `keras`: High-level neural network API
+  - `scikit-learn`: Data preprocessing and metrics
   - `scikit-image`: Additional image processing functions
 - **Code Quality**: `flake8` for Python linting (norminette compliance)
 
@@ -50,35 +52,37 @@ The Leaffliction project is a computer vision application for plant disease clas
 
 ### Part 2: Data Augmentation (`Augmentation.py`)
 
-**Objective**: Balance dataset through image augmentation techniques
+**Objective**: Balance dataset through Keras augmentation layers
 
 **Implementation Plan**:
-1. **Augmentation Techniques** (6 required):
-   - **Flip**: Horizontal/vertical flipping
-   - **Rotate**: Random rotation (±15-45 degrees)
-   - **Skew**: Perspective transformation
-   - **Shear**: Shearing transformation
-   - **Crop**: Random cropping and resizing
-   - **Distortion**: Barrel/pincushion distortion
+1. **Keras Augmentation Layers** (6+ techniques):
+   - **RandomFlip**: Horizontal/vertical flipping using `keras.layers.RandomFlip()`
+   - **RandomRotation**: Random rotation using `keras.layers.RandomRotation(factor=0.2)`
+   - **RandomZoom**: Zoom in/out using `keras.layers.RandomZoom(height_factor=0.2)`
+   - **RandomTranslation**: Shift images using `keras.layers.RandomTranslation()`
+   - **RandomCrop**: Random cropping using `keras.layers.RandomCrop()`
+   - **RandomGaussianBlur**: Gaussian blur using `keras.layers.RandomGaussianBlur()`
+   - **RandomBrightness**: Brightness adjustment using `keras.layers.RandomBrightness()`
+   - **RandomContrast**: Contrast adjustment using `keras.layers.RandomContrast()`
 
 2. **Balancing Strategy**:
+   - Create augmentation pipeline using `keras.Sequential`
    - Calculate target count per class (use max class size)
-   - Determine augmentation multiplier per class
-   - Apply augmentations until balanced
+   - Generate augmented images on-the-fly during training
+   - Option to pre-generate and save augmented dataset for evaluation
 
-3. **File Management**:
-   - Save augmented images with suffix: `original_name_AugmentationType.JPG`
-   - Create `augmented_directory` for evaluation
-   - Maintain original directory structure
+3. **Implementation Options**:
+   - **On-the-fly**: Use augmentation layers directly in training pipeline
+   - **Pre-generation**: Save augmented images with suffix for balanced dataset
+   - **Hybrid**: Combine both approaches for maximum flexibility
 
 **Key Functions**:
-- `apply_flip(image)`: Flip transformation
-- `apply_rotation(image, angle)`: Rotation transformation
-- `apply_skew(image)`: Skew transformation
-- `apply_shear(image)`: Shear transformation
-- `apply_crop(image)`: Crop transformation
-- `apply_distortion(image)`: Distortion transformation
-- `balance_dataset(input_dir, output_dir)`: Main balancing logic
+- `create_augmentation_pipeline()`: Build Keras Sequential augmentation pipeline
+- `apply_augmentation_layer(image, layer)`: Apply single augmentation layer
+- `generate_augmented_images(input_dir, output_dir)`: Pre-generate augmented dataset
+- `balance_dataset_keras(input_dir, output_dir)`: Main balancing logic using Keras layers
+- `create_balanced_generators()`: Create balanced data generators with augmentation
+- `visualize_augmentations(image_path)`: Display augmentation examples
 
 ### Part 3: Image Transformation (`Transformation.py`)
 
@@ -127,26 +131,32 @@ The Leaffliction project is a computer vision application for plant disease clas
    - Apply preprocessing (resize, normalize)
 
 2. **Feature Extraction**:
-   - Use plantCV for feature extraction (color histograms, shape features)
-   - Extract statistical features (mean, std, texture features)
-   - Combine multiple feature types
+   - Use EfficientNetB0 pre-trained on ImageNet as feature extractor
+   - Integrate Keras augmentation layers directly into training pipeline
+   - Fine-tune the model on plant disease dataset
+   - Apply augmentation during training for better generalization
 
 3. **Model Architecture**:
-   - **Primary**: Random Forest or SVM (scikit-learn)
-   - **Alternative**: Simple CNN using basic layers
-   - Cross-validation for hyperparameter tuning
+   - **Augmentation Pipeline**: Keras Sequential with augmentation layers
+   - **Base Model**: EfficientNetB0 from Keras Applications
+   - **Transfer Learning**: Pre-trained weights from ImageNet
+   - **Fine-tuning**: Unfreeze top layers for domain adaptation
+   - **Custom Head**: Add classification layers for disease prediction
 
 4. **Training Process**:
+   - Input size: 224x224 (EfficientNetB0 standard input)
+   - Integrated augmentation pipeline in model architecture
    - Stratified split to maintain class balance
-   - Feature scaling/normalization
-   - Model training with validation monitoring
-   - Save model, scaler, and label encoder
+   - Real-time augmentation during training (no storage overhead)
+   - Learning rate scheduling and early stopping
+   - Save best model based on validation accuracy
 
 5. **Output**:
    - Create ZIP file containing:
-     - Trained model (`model.pkl`)
-     - Feature scaler (`scaler.pkl`)
-     - Label encoder (`label_encoder.pkl`)
+     - Trained model (`efficientnet_model.h5` or `.keras`)
+     - Model architecture (`model_config.json`)
+     - Training history (`training_history.json`)
+     - Class labels (`class_labels.json`)
      - Augmented dataset
      - Training metadata
 
@@ -156,21 +166,26 @@ The Leaffliction project is a computer vision application for plant disease clas
    - Load preprocessing components
 
 2. **Image Processing**:
-   - Apply same preprocessing as training
-   - Extract features using same pipeline
+   - Resize images to 224x224 for EfficientNetB0
+   - Apply same preprocessing as training (normalization)
+   - Use Keras preprocessing utilities
 
 3. **Prediction**:
    - Display original and preprocessed image
-   - Predict disease class with confidence score
-   - Show prediction results
+   - Predict disease class with confidence scores for all classes
+   - Show top prediction with probability
+   - Display prediction results with confidence visualization
 
 **Key Functions**:
 - `load_dataset(path)`: Load and split dataset
-- `extract_features(image)`: Feature extraction pipeline
-- `train_model(X, y)`: Model training
+- `create_augmentation_pipeline()`: Build Keras augmentation layers
+- `create_data_generators()`: Create Keras data generators with class balancing
+- `build_efficientnet_model(num_classes)`: Build complete model with augmentation
+- `train_model(train_generator, val_generator)`: Model training with callbacks
 - `save_model_zip(model, data, path)`: Save model and data
 - `load_model_zip(path)`: Load trained model
-- `predict_disease(image_path)`: Make prediction
+- `preprocess_image(image_path)`: Preprocess image for prediction
+- `predict_disease(image_path)`: Make prediction with confidence scores
 
 ### Project Structure
 ```
