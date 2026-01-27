@@ -1,10 +1,4 @@
 #!/usr/bin/env python3
-"""
-Augmentation.py - Data Augmentation for Leaffliction Project
-
-This module balances the dataset using OpenCV and NumPy transformations
-to create additional images for under-represented classes.
-"""
 
 import argparse
 import sys
@@ -12,55 +6,41 @@ import shutil
 from pathlib import Path
 from typing import Dict, List, Tuple
 import random
-
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 
-
-# Supported image extensions
 IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.webp'}
-
-# Target image size for processing
 TARGET_SIZE = (224, 224)
 
 
 def flip_image(image: np.ndarray) -> np.ndarray:
     """Apply horizontal and vertical flip."""
     if random.random() > 0.5:
-        image = cv2.flip(image, 1)  # Horizontal flip
+        image = cv2.flip(image, 1)
     if random.random() > 0.5:
-        image = cv2.flip(image, 0)  # Vertical flip
+        image = cv2.flip(image, 0)
     return image
 
 
 def rotate_image(image: np.ndarray) -> np.ndarray:
     """Apply random rotation."""
-    # Random rotation: either left (-90 to -10) or right (10 to 90)
     if random.random() > 0.5:
-        angle = random.uniform(-90, -10)  # Left rotation
+        angle = random.uniform(-90, -10)
     else:
-        angle = random.uniform(10, 90)    # Right rotation
-    
+        angle = random.uniform(10, 90)
     h, w = image.shape[:2]
     center = (w // 2, h // 2)
-    
-    # Get rotation matrix
     rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
-    
-    # Apply rotation
     rotated = cv2.warpAffine(image, rotation_matrix, (w, h),
                              borderMode=cv2.BORDER_CONSTANT,
-                             borderValue=(0, 0, 0))  # Black background
+                             borderValue=(0, 0, 0))
     return rotated
 
 
 def blur_image(image: np.ndarray) -> np.ndarray:
     """Apply random blur effect."""
-    # Random kernel size (odd numbers only) - increased for more blur
     kernel_size = random.choice([5, 7, 9, 11, 13])
-    
-    # Apply Gaussian blur
     blurred = cv2.GaussianBlur(image, (kernel_size, kernel_size), 0)
     return blurred
 
@@ -68,123 +48,45 @@ def blur_image(image: np.ndarray) -> np.ndarray:
 def crop_image(image: np.ndarray) -> np.ndarray:
     """Apply random cropping and resize back to original size."""
     h, w = image.shape[:2]
-    
-    # Random crop parameters (crop between 70% and 95% of original size)
     crop_factor = random.uniform(0.7, 0.95)
-    
-    # Calculate crop dimensions
     crop_h = int(h * crop_factor)
     crop_w = int(w * crop_factor)
-    
-    # Random crop position
     start_h = random.randint(0, h - crop_h)
     start_w = random.randint(0, w - crop_w)
-    
-    # Crop the image
     cropped = image[start_h:start_h + crop_h, start_w:start_w + crop_w]
-    
-    # Resize back to original size
     resized = cv2.resize(cropped, (w, h))
-    
     return resized
 
 
 def zoom_image(image: np.ndarray) -> np.ndarray:
-    """Apply random zoom in (scaling up only)."""
+    """Apply random zoom in."""
     h, w = image.shape[:2]
-    
-    # Random scale factor (only zoom in, no zoom out)
-    scale = random.uniform(1.2, 1.5)  # Only zoom in
-    
-    # Calculate new dimensions
+    scale = random.uniform(1.2, 1.5)
     new_h, new_w = int(h * scale), int(w * scale)
-    
-    # Resize image (always scaling up)
     resized = cv2.resize(image, (new_w, new_h))
-    
-    # Crop to original size (center crop)
     start_h = (new_h - h) // 2
     start_w = (new_w - w) // 2
     result = resized[start_h:start_h + h, start_w:start_w + w]
-    
     return result
 
 
 def adjust_brightness(image: np.ndarray) -> np.ndarray:
     """Apply random brightness adjustment."""
-    # Convert to float for calculations
     img_float = image.astype(np.float32)
-    
-    # Random brightness factor (increased range)
-    brightness = random.uniform(0.5, 2.0)  # More dramatic brightness changes
-    
-    # Apply brightness
+    brightness = random.uniform(0.5, 2.0)
     brightened = img_float * brightness
-    
-    # Clip values to [0, 255] and convert back to uint8
     result = np.clip(brightened, 0, 255).astype(np.uint8)
     return result
 
 
 def adjust_contrast(image: np.ndarray) -> np.ndarray:
     """Apply random contrast adjustment."""
-    # Convert to float for calculations
     img_float = image.astype(np.float32)
-    
-    # Random contrast factor (increased range)
-    contrast = random.uniform(0.5, 2.0)  # More dramatic contrast changes
-    
-    # Apply contrast (contrast around mean)
+    contrast = random.uniform(0.5, 2.0)
     mean = img_float.mean()
     contrasted = mean + contrast * (img_float - mean)
-    
-    # Clip values to [0, 255] and convert back to uint8
     result = np.clip(contrasted, 0, 255).astype(np.uint8)
     return result
-
-
-def distort_image(image: np.ndarray) -> np.ndarray:
-    """Apply random barrel/pincushion distortion."""
-    h, w = image.shape[:2]
-    
-    # Random distortion parameters (reduced for more subtle distortion)
-    distortion_strength = random.uniform(-0.4, 0.4)
-    
-    # Create distortion map
-    center_x, center_y = w // 2, h // 2
-    
-    # Create coordinate grids
-    x, y = np.meshgrid(np.arange(w), np.arange(h))
-    
-    # Calculate distance from center
-    dx = x - center_x
-    dy = y - center_y
-    distance = np.sqrt(dx**2 + dy**2)
-    
-    # Normalize distance
-    max_distance = np.sqrt(center_x**2 + center_y**2)
-    normalized_distance = distance / max_distance
-    
-    # Apply distortion formula
-    # Positive values: barrel distortion, negative: pincushion
-    distortion_factor = 1 + distortion_strength * normalized_distance**2
-    
-    # Calculate new coordinates
-    new_x = center_x + dx * distortion_factor
-    new_y = center_y + dy * distortion_factor
-    
-    # Clip coordinates to image bounds
-    new_x = np.clip(new_x, 0, w - 1)
-    new_y = np.clip(new_y, 0, h - 1)
-    
-    # Apply distortion using remap
-    map_x = new_x.astype(np.float32)
-    map_y = new_y.astype(np.float32)
-    
-    distorted = cv2.remap(image, map_x, map_y, cv2.INTER_LINEAR,
-                          borderMode=cv2.BORDER_REFLECT)
-    
-    return distorted
 
 
 def create_augmentation_functions() -> Dict[str, callable]:
@@ -219,12 +121,11 @@ def load_and_preprocess_image(image_path: str) -> np.ndarray:
         image = cv2.imread(image_path)
         if image is None:
             raise ValueError(f"Could not load image: {image_path}")
-        
-        # Resize to target size
+
         image = cv2.resize(image, TARGET_SIZE)
-        
+
         return image
-    
+
     except Exception as e:
         print(f"Error loading image {image_path}: {e}")
         return None
@@ -250,14 +151,14 @@ def scan_dataset_by_fruit(dataset_path: str,
         raise FileNotFoundError(f"Dataset path not found: {dataset_path}")
 
     # Convert fruit type to match directory naming
-    fruit_prefix = fruit_type.capitalize()  # 'apple' -> 'Apple'
+    fruit_prefix = fruit_type.capitalize()
 
     for class_dir in dataset_root.iterdir():
         if not class_dir.is_dir():
             continue
 
         class_name = class_dir.name
-        
+
         # Filter by fruit type
         if not class_name.startswith(fruit_prefix):
             continue
@@ -291,31 +192,26 @@ def apply_single_augmentation(
         Augmented image as numpy array (BGR format, 0-255 range).
     """
     try:
-        # Apply augmentation
         augmented_image = aug_function(image.copy())
-        
-        # Validate output
         if augmented_image is None:
             print(f"Warning: {aug_name} returned None, using original")
             return image.copy()
-        
-        # Check for valid shape
+
         if augmented_image.shape != image.shape:
             print(f"Warning: {aug_name} changed shape, using original")
             return image.copy()
-        
-        # Check for valid data type
+
         if augmented_image.dtype != np.uint8:
             augmented_image = np.clip(augmented_image, 0, 255).astype(np.uint8)
-        
+
         print(f"  {aug_name}: range [{augmented_image.min()}, "
               f"{augmented_image.max()}]")
-        
+
         return augmented_image
-        
+
     except Exception as e:
         print(f"  Error with {aug_name}: {e}")
-        return image.copy()  # Return original on error
+        return image.copy()
 
 
 def calculate_augmentation_needs(
@@ -332,7 +228,7 @@ def calculate_augmentation_needs(
     """
     class_counts = {cls: len(paths) for cls, paths in dataset.items()}
     target_count = max(class_counts.values())
-    
+
     augmentation_needs = {}
     for class_name, current_count in class_counts.items():
         needed = target_count - current_count
@@ -365,7 +261,7 @@ def generate_augmented_images(
     """
     # Scan input dataset for specific fruit type
     dataset = scan_dataset_by_fruit(input_dir, fruit_type)
-    
+
     if not dataset:
         print(f"No {fruit_type} image classes found in input directory.")
         return
@@ -396,7 +292,7 @@ def generate_augmented_images(
         class_output_dir.mkdir(exist_ok=True)
 
         needed_augmentations = augmentation_needs[class_name]
-        
+
         if needed_augmentations == 0:
             print(f"\nClass '{class_name}': No augmentation needed")
             # Copy original images
@@ -425,7 +321,7 @@ def generate_augmented_images(
             # Select source image (cycle through available images)
             source_path = image_paths[source_index % len(image_paths)]
             source_name = Path(source_path).stem
-            
+
             # Load and preprocess image
             original_image = load_and_preprocess_image(source_path)
             if original_image is None:
@@ -436,20 +332,20 @@ def generate_augmented_images(
             for aug_name, aug_function in aug_functions.items():
                 if augmented_count >= needed_augmentations:
                     break
-                
+
                 try:
                     # Apply single augmentation to the original image
                     augmented = apply_single_augmentation(
                         original_image, aug_name, aug_function
                     )
-                    
+
                     # Generate output filename with transformation type
                     aug_filename = f"{source_name}_{aug_name}.jpg"
                     output_file = class_output_dir / aug_filename
-                    
+
                     # Save augmented image
                     cv2.imwrite(str(output_file), augmented)
-                    
+
                     augmented_count += 1
                     total_generated += 1
 
@@ -459,7 +355,7 @@ def generate_augmented_images(
 
                 except Exception as e:
                     print(f"  Error generating {aug_name} augmentation: {e}")
-            
+
             source_index += 1
 
         print(f"  Completed: {augmented_count} augmented images generated")
@@ -484,39 +380,39 @@ def visualize_augmentations(image_path: str) -> None:
 
     # Create augmentation functions
     aug_functions = create_augmentation_functions()
-    
+
     # Create figure for visualization (only augmented images, no original)
     num_augmentations = len(aug_functions)
     cols = 3
     rows = (num_augmentations + cols - 1) // cols
-    
+
     fig, axes = plt.subplots(rows, cols, figsize=(15, 5 * rows))
     axes = axes.flatten()
-    
+
     # Apply and show each augmentation
     for i, (aug_name, aug_function) in enumerate(aug_functions.items()):
         augmented = apply_single_augmentation(
             original_image, aug_name, aug_function)
-        
+
         # Convert BGR to RGB for matplotlib
         augmented_rgb = cv2.cvtColor(augmented, cv2.COLOR_BGR2RGB)
         axes[i].imshow(augmented_rgb)
         axes[i].set_title(f'{aug_name}', fontsize=12, fontweight='bold')
         axes[i].axis('off')
-    
+
     # Hide unused subplots
     for i in range(num_augmentations, len(axes)):
         axes[i].axis('off')
-    
+
     plt.tight_layout()
-    
+
     # Save visualization in visualization folder
     viz_dir = Path("visualization")
     viz_dir.mkdir(exist_ok=True)
     output_path = viz_dir / f"augmentation_output_{Path(image_path).stem}.png"
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
     print(f"Augmentation visualization saved to: {output_path}")
-    
+
     plt.show()
 
 
@@ -604,7 +500,7 @@ def main() -> int:
         print(f"Fruit type: {args.fruit_type}")
         print(f"Input directory: {args.input_dir}")
         print(f"Output directory: {args.output_dir}")
-        
+
         if args.target_count:
             print(f"Target count per class: {args.target_count}")
         else:
@@ -632,5 +528,5 @@ if __name__ == "__main__":
     # Set random seeds for reproducibility
     random.seed(42)
     np.random.seed(42)
-    
+
     sys.exit(main())
