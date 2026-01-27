@@ -1,6 +1,7 @@
 .idea
 charts/
 visualization/
+transformations
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
