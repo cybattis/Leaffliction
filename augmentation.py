@@ -117,7 +117,7 @@ def load_and_preprocess_image(image_path: str) -> np.ndarray:
         Loaded image as numpy array (BGR format, 0-255 range).
     """
     try:
-        # Load image using OpenCV (BGR format)
+        # OpenCV (BGR format)
         image = cv2.imread(image_path)
         if image is None:
             raise ValueError(f"Could not load image: {image_path}")
@@ -150,7 +150,6 @@ def scan_dataset_by_fruit(dataset_path: str,
     if not dataset_root.exists():
         raise FileNotFoundError(f"Dataset path not found: {dataset_path}")
 
-    # Convert fruit type to match directory naming
     fruit_prefix = fruit_type.capitalize()
 
     for class_dir in dataset_root.iterdir():
@@ -159,7 +158,6 @@ def scan_dataset_by_fruit(dataset_path: str,
 
         class_name = class_dir.name
 
-        # Filter by fruit type
         if not class_name.startswith(fruit_prefix):
             continue
 
@@ -259,14 +257,12 @@ def generate_augmented_images(
         fruit_type: Fruit type to process ('apple' or 'grape').
         target_count: Target number of images per class (auto if None).
     """
-    # Scan input dataset for specific fruit type
     dataset = scan_dataset_by_fruit(input_dir, fruit_type)
 
     if not dataset:
         print(f"No {fruit_type} image classes found in input directory.")
         return
 
-    # Calculate augmentation needs
     if target_count is None:
         calc_result = calculate_augmentation_needs(dataset)
         target_count, augmentation_needs = calc_result
@@ -276,17 +272,14 @@ def generate_augmented_images(
             for cls, paths in dataset.items()
         }
 
-    # Create augmentation functions
     aug_functions = create_augmentation_functions()
     print(f"\nAugmentation Functions: {list(aug_functions.keys())}")
 
-    # Create output directory
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
     total_generated = 0
 
-    # Process each class
     for class_name, image_paths in dataset.items():
         class_output_dir = output_path / class_name
         class_output_dir.mkdir(exist_ok=True)
@@ -295,7 +288,6 @@ def generate_augmented_images(
 
         if needed_augmentations == 0:
             print(f"\nClass '{class_name}': No augmentation needed")
-            # Copy original images
             for i, img_path in enumerate(image_paths):
                 src_path = Path(img_path)
                 dst_name = f"original_{i:04d}{src_path.suffix}"
@@ -306,44 +298,36 @@ def generate_augmented_images(
         print(f"\nProcessing class '{class_name}': "
               f"generating {needed_augmentations} augmented images...")
 
-        # Copy original images first
         for i, img_path in enumerate(image_paths):
             src_path = Path(img_path)
             dst_name = f"original_{i:04d}{src_path.suffix}"
             dst_path = class_output_dir / dst_name
             shutil.copy2(src_path, dst_path)
 
-        # Generate augmented images using individual transformations
         augmented_count = 0
         source_index = 0
 
         while augmented_count < needed_augmentations:
-            # Select source image (cycle through available images)
             source_path = image_paths[source_index % len(image_paths)]
             source_name = Path(source_path).stem
 
-            # Load and preprocess image
             original_image = load_and_preprocess_image(source_path)
             if original_image is None:
                 source_index += 1
                 continue
 
-            # Apply each augmentation type separately to the original image
             for aug_name, aug_function in aug_functions.items():
                 if augmented_count >= needed_augmentations:
                     break
 
                 try:
-                    # Apply single augmentation to the original image
                     augmented = apply_single_augmentation(
                         original_image, aug_name, aug_function
                     )
 
-                    # Generate output filename with transformation type
                     aug_filename = f"{source_name}_{aug_name}.jpg"
                     output_file = class_output_dir / aug_filename
 
-                    # Save augmented image
                     cv2.imwrite(str(output_file), augmented)
 
                     augmented_count += 1
@@ -372,16 +356,13 @@ def visualize_augmentations(image_path: str) -> None:
     Args:
         image_path: Path to the image to visualize.
     """
-    # Load original image
     original_image = load_and_preprocess_image(image_path)
     if original_image is None:
         print(f"Could not load image: {image_path}")
         return
 
-    # Create augmentation functions
     aug_functions = create_augmentation_functions()
 
-    # Create figure for visualization (only augmented images, no original)
     num_augmentations = len(aug_functions)
     cols = 3
     rows = (num_augmentations + cols - 1) // cols
@@ -389,24 +370,20 @@ def visualize_augmentations(image_path: str) -> None:
     fig, axes = plt.subplots(rows, cols, figsize=(15, 5 * rows))
     axes = axes.flatten()
 
-    # Apply and show each augmentation
     for i, (aug_name, aug_function) in enumerate(aug_functions.items()):
         augmented = apply_single_augmentation(
             original_image, aug_name, aug_function)
 
-        # Convert BGR to RGB for matplotlib
         augmented_rgb = cv2.cvtColor(augmented, cv2.COLOR_BGR2RGB)
         axes[i].imshow(augmented_rgb)
         axes[i].set_title(f'{aug_name}', fontsize=12, fontweight='bold')
         axes[i].axis('off')
 
-    # Hide unused subplots
     for i in range(num_augmentations, len(axes)):
         axes[i].axis('off')
 
     plt.tight_layout()
 
-    # Save visualization in visualization folder
     viz_dir = Path("visualization")
     viz_dir.mkdir(exist_ok=True)
     output_path = viz_dir / f"augmentation_output_{Path(image_path).stem}.png"
@@ -428,15 +405,18 @@ def parse_arguments() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python augmentation.py apple leaves/images augmented_directory/
-  python augmentation.py grape leaves/images augmented_directory/ \\
-    --target-count 2000
-  python augmentation.py --visualize leaves/images/Apple_healthy/image.JPG
+  python augmentation.py apple
+  python augmentation.py grape -t 2000
+  python augmentation.py -v leaves/images/Apple_healthy/image.JPG
+
+Advanced usage (custom paths):
+  python augmentation.py apple -i custom/path -o custom/output
+  python augmentation.py grape -i data/ -o results/
         """
     )
 
     parser.add_argument(
-        "--visualize",
+        "-v", "--visualize",
         type=str,
         metavar="IMAGE_PATH",
         help="Visualize augmentations for a single image"
@@ -451,21 +431,23 @@ Examples:
     )
 
     parser.add_argument(
-        "input_dir",
+        "-i", "--input-dir",
         type=str,
-        nargs='?',
-        help="Input directory containing class subdirectories with images"
+        default="leaves/images",
+        help="Input directory containing class subdirectories with images "
+             "(default: leaves/images)"
     )
 
     parser.add_argument(
-        "output_dir",
+        "-o", "--output-dir",
         type=str,
-        nargs='?',
-        help="Output directory for balanced dataset"
+        default=None,
+        help="Output directory for balanced dataset "
+             "(default: augmented_{fruit_type}/)"
     )
 
     parser.add_argument(
-        "--target-count",
+        "-t", "--target-count",
         type=int,
         default=None,
         help="Target number of images per class (auto-detect if not specified)"
@@ -484,18 +466,19 @@ def main() -> int:
     args = parse_arguments()
 
     try:
-        # Visualization mode
         if args.visualize:
             print(f"Visualizing augmentations for: {args.visualize}")
             visualize_augmentations(args.visualize)
             return 0
 
-        # Validate required arguments
-        if not args.fruit_type or not args.input_dir or not args.output_dir:
-            print("Error: fruit_type, input_dir and output_dir are "
-                  "required for augmentation")
+        if not args.fruit_type:
+            print("Error: fruit_type is required for augmentation")
             print("Use --visualize IMAGE_PATH to visualize augmentations")
+            print("Run with -h for help")
             return 1
+
+        if args.output_dir is None:
+            args.output_dir = f"augmented_{args.fruit_type}/"
 
         print(f"Fruit type: {args.fruit_type}")
         print(f"Input directory: {args.input_dir}")
@@ -506,7 +489,6 @@ def main() -> int:
         else:
             print("Target count: Auto-detect (max class size)")
 
-        # Generate augmented dataset
         generate_augmented_images(
             args.input_dir,
             args.output_dir,
@@ -525,8 +507,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    # Set random seeds for reproducibility
-    random.seed(42)
-    np.random.seed(42)
+    # Décommenter pour reproduire une seed
+    # random.seed(42)
+    # np.random.seed(42)
 
     sys.exit(main())
