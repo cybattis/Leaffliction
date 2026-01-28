@@ -1,16 +1,6 @@
 #!/usr/bin/env python3
-"""
-predict.py - Prediction Script for Leaffliction Project
-
-This script uses trained models to predict plant diseases from leaf images.
-Supports batch prediction on folders with accuracy reporting.
-"""
 
 import os
-
-# Suppress TensorFlow warnings before importing TF
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
 import argparse
 import csv
@@ -24,6 +14,9 @@ import cv2
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
 # Constants
 IMAGE_SIZE = (224, 224)
@@ -44,7 +37,7 @@ def load_model_and_labels(
         plant_type is 'apple', 'grape', or None if unknown.
     """
     plant_type = None
-    
+
     # Handle shortcut names
     if model_path.lower() in ['apple', 'grape']:
         plant_type = model_path.lower()
@@ -195,14 +188,14 @@ def scan_folder_for_images(
         # Organized by class subdirectories
         for subdir in subdirs:
             class_name = subdir.name
-            
+
             # Filter by plant type if specified
             if plant_type:
                 # Check if folder starts with plant type (case-insensitive)
                 if not class_name.lower().startswith(plant_type.lower()):
                     skipped_folders.append(class_name)
                     continue
-            
+
             images = []
             for img_file in subdir.iterdir():
                 if img_file.suffix.lower() in IMAGE_EXTENSIONS:
@@ -331,7 +324,7 @@ def predict_folder(
                 status = ""
                 if is_correct is not None:
                     status = "✓" if is_correct else "✗"
-                
+
                 # Calculate running accuracy
                 evaluated = results['correct'] + results['incorrect']
                 if evaluated > 0:
@@ -339,7 +332,7 @@ def predict_folder(
                     acc_str = f" | Acc: {running_acc:.2%}"
                 else:
                     acc_str = ""
-                
+
                 print(
                     f"[{image_count}/{total_images}]{acc_str} "
                     f"{Path(image_path).name}")
