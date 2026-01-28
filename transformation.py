@@ -13,24 +13,55 @@ from plantcv import plantcv as pcv
 matplotlib.use('Agg')
 
 
+def apply_morphological_cleaning(mask, opening_size=5, closing_size=7):
+    """
+    Clean binary mask using morphological operations.
+
+    Args:
+        mask (ndarray): Binary mask (0 or 255)
+        opening_size (int): Kernel size for opening operation (removes noise)
+        closing_size (int): Kernel size for closing operation (fills holes)
+
+    Returns:
+        tuple: (opened_mask, closed_mask, final_clean_mask)
+    """
+    # Create structuring elements (kernels)
+    kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,
+                                            (opening_size, opening_size))
+    kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,
+                                             (closing_size, closing_size))
+
+    # Step 1: Opening - Remove background noise (salt)
+    opened = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel_open)
+
+    # Step 2: Closing - Fill holes inside leaf (pepper)
+    closed = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, kernel_close)
+
+    return opened, closed, closed  # Final mask = closed
+
+
 def plant_mask(img, lower_green=None, upper_green=None):
     """Create a mask to isolate the plant from the background"""
     # Default HSV ranges for plant green vegetation
     if lower_green is None:
-        lower_green = (15, 40, 40) # H=35° (yellow-green), S=40 (some color), V=40 (not too dark)
+        # H=15° (yellow-green), S=40 (moderate), V=40 (dark)
+        lower_green = (15, 40, 40)
     if upper_green is None:
-        upper_green = (85, 255, 255) # H=85° (cyan-green), S=255 (vivid), V=255 (bright)
-
+        # H=85° (cyan-green), S=255 (vivid), V=255 (bright)
+        upper_green = (80, 255, 255)
 
     blurred_img = pcv.gaussian_blur(img=img, ksize=(15, 15), sigma_x=0)
     bgr = cv2.cvtColor(blurred_img, cv2.COLOR_RGB2BGR)
     hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
-    mask, masked_img = pcv.threshold.custom_range(img=blurred_img,
-                                                  lower_thresh=lower_green,
-                                                  upper_thresh=upper_green,
-                                                  channel='HSV')
+    mask, _ = pcv.threshold.custom_range(img=blurred_img,
+                                         lower_thresh=lower_green,
+                                         upper_thresh=upper_green,
+                                         channel='HSV')
 
-    return hsv, mask, masked_img, blurred_img
+    _, _, clean_mask = apply_morphological_cleaning(mask,
+                                                    opening_size=5,
+                                                    closing_size=15)
+    return hsv, mask, clean_mask, blurred_img
 
 
 def gaussian_blur_transform(img):
@@ -42,6 +73,7 @@ def gaussian_blur_transform(img):
     gaussian_img = pcv.gaussian_blur(img=threshold_dark,
                                      ksize=(5, 5),
                                      sigma_x=0)
+
     return gaussian_img
 
 
@@ -73,9 +105,11 @@ def object_analyse(img, mask):
 
 def roi_contour_extraction(original_img, mask):
     """Extract and visualize ROI"""
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(mask,
+                                   cv2.RETR_EXTERNAL,
+                                   cv2.CHAIN_APPROX_SIMPLE)
     roi_contours = original_img.copy()
-    cv2.drawContours(roi_contours, contours, -1, (255, 0, 0), 3)
+    cv2.drawContours(roi_contours, contours, -1, (0, 0, 255), 3)
 
     # Calculate metrics
     total_area = sum(cv2.contourArea(c) for c in contours)
@@ -88,7 +122,6 @@ def roi_contour_extraction(original_img, mask):
                 (20, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
 
     return roi_contours, shape_analysis
-
 
 
 def pseudolandmarks_transform(img, mask):
@@ -119,61 +152,54 @@ def pseudolandmarks_transform(img, mask):
     return landmarks_img
 
 
-def color_histogram_transform(img, mask):
+def color_histogram_transform(img, mask, output_path):
     """
     Analyzes color and returns the histogram plot as an image array
-    Includes RGB, HSV, and LAB color spaces using plantcv.visualize.histogram
+    Includes RGB, HSV, and LAB color spaces on a single graph
     """
-    # 1. RGB Histogram (Original Image)
-    # pcv.visualize.histogram plots pixel counts for channels
-    hist_rgb = pcv.visualize.histogram(img=img, mask=mask,
-                                       title="RGB Histogram")
-    filename_rgb = "temp_hist_rgb.png"
-    hist_rgb.save(filename_rgb)
-
-    # 2. HSV Histogram (Hue, Saturation, Value)
+    # Convert to different color spaces
+    rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    hist_hsv = pcv.visualize.histogram(img=hsv, mask=mask,
-                                       title="HSV Histogram")
-    filename_hsv = "temp_hist_hsv.png"
-    hist_hsv.save(filename_hsv)
-
-    # 3. LAB Histogram (Lightness, Green-Magenta, Blue-Yellow)
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2Lab)
-    hist_lab = pcv.visualize.histogram(img=lab, mask=mask,
-                                       title="LAB Histogram")
-    filename_lab = "temp_hist_lab.png"
-    hist_lab.save(filename_lab)
 
-    # Read the generated plots
-    img_rgb_plot = cv2.imread(filename_rgb)
-    img_hsv_plot = cv2.imread(filename_hsv)
-    img_lab_plot = cv2.imread(filename_lab)
+    # Create figure with 1 subplot
+    fig, ax = plt.subplots(figsize=(10, 8), dpi=80)
 
-    # Clean up temporary files
-    for f in [filename_rgb, filename_hsv, filename_lab]:
-        if os.path.exists(f):
-            os.remove(f)
+    # Calculate total non-zero pixels in mask for proportion
+    total_pixels = cv2.countNonZero(mask) \
+        if mask is not None \
+        else img.shape[0] * img.shape[1]
+    if total_pixels == 0:
+        total_pixels = 1
 
-    # Helper to resize images to match width of the first image
-    def match_width(target_img, source_img):
-        if source_img is None:
-            return target_img
-        _, w_t = target_img.shape[:2]
-        h_s, w_s = source_img.shape[:2]
-        if w_t != w_s:
-            scale = w_t / w_s
-            return cv2.resize(source_img, (w_t, int(h_s * scale)))
-        return source_img
+    def plot_channels(image, labels, colors, linestyle='-'):
+        for i, (label, color) in enumerate(zip(labels, colors)):
+            hist = cv2.calcHist([image], [i], mask, [256], [0, 256])
+            hist_prop = hist / total_pixels
+            ax.plot(hist_prop, color=color, label=label, linestyle=linestyle)
 
-    # Resize plots to match RGB plot width
-    img_hsv_plot = match_width(img_rgb_plot, img_hsv_plot)
-    img_lab_plot = match_width(img_rgb_plot, img_lab_plot)
+    # Plot all spaces on the same axes
+    plot_channels(rgb, ['Red', 'Green', 'Blue'], ['r', 'g', 'b'],
+                  linestyle='-')
+    plot_channels(hsv, ['Hue', 'Saturation', 'Value'],
+                  ['orange', 'purple', 'brown'],
+                  linestyle='--')
+    plot_channels(lab, ['Lightness', 'A', 'B'],
+                  ['black', 'cyan', 'magenta'],
+                  linestyle=':')
 
-    # Stack vertically: RGB -> HSV -> LAB
-    final_hist_img = cv2.vconcat([img_rgb_plot, img_hsv_plot, img_lab_plot])
+    ax.set_title("Color Channels Proportion (RGB, HSV, LAB)")
+    ax.set_xlabel("Pixel Intensity")
+    ax.set_ylabel("Proportion")
+    ax.set_xlim(0, 256)
+    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    ax.grid(True, alpha=0.3)
 
-    return final_hist_img
+    plt.tight_layout()
+    histogram_path = output_path.replace('.JPG', '_histogram.png')
+    print(f"Saved result to {histogram_path}")
+    plt.savefig(histogram_path)
+    plt.close(fig)
 
 
 def process_single_image(settings, image_path, output_path):
@@ -187,26 +213,30 @@ def process_single_image(settings, image_path, output_path):
     print(f"Processing image: {image_path}")
     print(f"Image shape: {original_img.shape}")
 
-    hsv, mask, masked_img, blurred_img = plant_mask(original_img)
-    only_plant = pcv.apply_mask(img=original_img, mask=mask, mask_color='black')
-    diseases_mask = mask_transform(only_plant)
+    # Preprocessing - Mask background
+    hsv, mask, clean_mask, blurred_img = plant_mask(original_img)
 
+    # Transformations
+    only_plant = pcv.apply_mask(img=original_img,
+                                mask=clean_mask,
+                                mask_color='black')
+    diseases_mask = mask_transform(only_plant)
     blur_img = gaussian_blur_transform(only_plant)
     obj_img = object_analyse(original_img, diseases_mask)
     roi_contours, roi_analyse = roi_contour_extraction(original_img, mask)
     landmark_img = pseudolandmarks_transform(original_img, mask)
-    hist_img = color_histogram_transform(original_img, mask)
 
     # Display images (convert BGR to RGB for matplotlib)
     if settings.debug:
         original_img = cv2.cvtColor(original_img, cv2.COLOR_BGR2RGB)
         blurred_img = cv2.cvtColor(blurred_img, cv2.COLOR_BGR2RGB)
-        mask = cv2.cvtColor(mask, cv2.COLOR_GRAY2RGB)
-        masked_img = cv2.cvtColor(masked_img, cv2.COLOR_BGR2RGB)
+        opened_mask = cv2.cvtColor(mask, cv2.COLOR_BGR2RGB)
+        closed_mask = cv2.cvtColor(mask, cv2.COLOR_BGR2RGB)
+        mask = cv2.cvtColor(mask, cv2.COLOR_BGR2RGB)
         only_plant = cv2.cvtColor(only_plant, cv2.COLOR_BGR2RGB)
 
         # Visualize the HSV channels and resulting mask
-        fig, axes = plt.subplots(2, 4, figsize=(16, 8))
+        fig, axes = plt.subplots(2, 5, figsize=(16, 8))
         # Row 1: Original, Blurred, HSV channels
         axes[0, 0].imshow(original_img)
         axes[0, 0].set_title('Original')
@@ -225,20 +255,32 @@ def process_single_image(settings, image_path, output_path):
         axes[0, 3].axis('off')
 
         # Row 2: Value channel, Green mask, Mask overlay, Comparison
-        axes[1, 0].imshow(hsv[:, :, 2], cmap='gray')
-        axes[1, 0].set_title('Value Channel (Brightness)')
+        axes[0, 4].imshow(hsv[:, :, 2], cmap='gray')
+        axes[0, 4].set_title('Value Channel (Brightness)')
+        axes[0, 4].axis('off')
+
+        axes[1, 0].imshow(opened_mask, cmap='gray')
+        axes[1, 0].set_title('Open Mask')
         axes[1, 0].axis('off')
 
-        axes[1, 1].imshow(mask, cmap='gray')
-        axes[1, 1].set_title('HSV Green Mask')
+        axes[1, 1].imshow(closed_mask, cmap='gray')
+        axes[1, 1].set_title('Closed Mask')
         axes[1, 1].axis('off')
+
+        axes[1, 2].imshow(mask, cmap='gray')
+        axes[1, 2].set_title('Clean Mask')
+        axes[1, 2].axis('off')
 
         # Overlay mask on original
         overlay = original_img.copy()
         overlay[mask == 0] = overlay[mask == 0] // 2  # Darken background
-        axes[1, 2].imshow(overlay)
-        axes[1, 2].set_title('Mask Overlay')
-        axes[1, 2].axis('off')
+        axes[1, 3].imshow(overlay)
+        axes[1, 3].set_title('Mask Overlay')
+        axes[1, 3].axis('off')
+
+        axes[1, 4].imshow(only_plant)
+        axes[1, 4].set_title('Only plant')
+        axes[1, 4].axis('off')
 
         plt.tight_layout()
         plt.savefig(output_path)
@@ -246,18 +288,18 @@ def process_single_image(settings, image_path, output_path):
     else:
         transformations = [
             (cv2.cvtColor(original_img, cv2.COLOR_BGR2RGB), 'Original Image'),
-            (cv2.cvtColor(mask, cv2.COLOR_GRAY2RGB), 'Plant Mask'),
+            (cv2.cvtColor(clean_mask, cv2.COLOR_GRAY2RGB), 'Plant Mask'),
             (cv2.cvtColor(only_plant, cv2.COLOR_BGR2RGB), 'Preprocess image'),
             (cv2.cvtColor(blur_img, cv2.COLOR_BGR2RGB), 'Gaussian Blur'),
-            (cv2.cvtColor(roi_contours, cv2.COLOR_BGR2RGB), 'ROI Contour Extraction'),
+            (cv2.cvtColor(roi_contours, cv2.COLOR_RGB2BGR),
+             'ROI Contour Extraction'),
             (cv2.cvtColor(roi_analyse, cv2.COLOR_BGR2RGB), 'ROI Analysis'),
             (cv2.cvtColor(obj_img, cv2.COLOR_BGR2RGB), 'Object Analysis'),
             (cv2.cvtColor(landmark_img, cv2.COLOR_BGR2RGB), 'Pseudolandmarks'),
-            (cv2.cvtColor(hist_img, cv2.COLOR_BGR2RGB), 'Color Histogram')
         ]
 
         # Create figure with subplots
-        fig, axes = plt.subplots(3, 3, figsize=(20, 15))
+        fig, axes = plt.subplots(2, 4, figsize=(20, 10))
         fig.suptitle(f'PlantCV Feature Extraction - '
                      f'{os.path.basename(image_path)}',
                      fontsize=16, fontweight='bold')
@@ -271,6 +313,8 @@ def process_single_image(settings, image_path, output_path):
         plt.savefig(output_path)
         plt.close(fig)
 
+        color_histogram_transform(original_img, mask, output_path)
+
     print(f"Saved result to {output_path}")
     print("Transformation complete!")
 
@@ -279,8 +323,7 @@ def main():
     parser = argparse.ArgumentParser(
         description='Image Transformation using PlantCV - '
                     'Extract 6 features from plant leaf images')
-    parser.add_argument('-i', '--image', type=str,
-                        help='Path to input image')
+    parser.add_argument('-i', '--image', type=str, help='Path to input image')
     parser.add_argument('-src', '--source', type=str,
                         help='Path to source directory')
     parser.add_argument('-dst', '--destination', type=str,
@@ -297,16 +340,19 @@ def main():
         if args.image is not None:
             print("Error: Cannot process both an image and a directory.")
             exit(1)
+        if not os.path.exists(args.source):
+            print(f"Error: Source directory '{args.source}' not found!")
         if args.destination is None:
             print("Error: Destination directory must be "
                   "specified when processing a directory.")
             exit(1)
-        if not os.path.exists(args.source):
-            print(f"Error: Source directory '{args.source}' not found!")
+        if not os.path.exists(args.destination):
+            os.makedirs(args.destination)
         for file in os.listdir(args.source):
             output_filename = f"transformed_{os.path.basename(file)}"
             output_path = os.path.join(args.destination, output_filename)
-            process_single_image(args, os.path.join(args.source, file), output_path)
+            image_path = os.path.join(args.source, file)
+            process_single_image(args, image_path, output_path)
 
     # Process single image
     if args.image is not None:
