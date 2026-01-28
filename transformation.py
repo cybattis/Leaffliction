@@ -13,6 +13,26 @@ from plantcv import plantcv as pcv
 matplotlib.use('Agg')
 
 
+def plant_mask(img, lower_green=None, upper_green=None):
+    """Create a mask to isolate the plant from the background"""
+    # Default HSV ranges for plant green vegetation
+    if lower_green is None:
+        lower_green = (15, 40, 40) # H=35° (yellow-green), S=40 (some color), V=40 (not too dark)
+    if upper_green is None:
+        upper_green = (85, 255, 255) # H=85° (cyan-green), S=255 (vivid), V=255 (bright)
+
+
+    blurred_img = pcv.gaussian_blur(img=img, ksize=(15, 15), sigma_x=0)
+    bgr = cv2.cvtColor(blurred_img, cv2.COLOR_RGB2BGR)
+    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+    mask, masked_img = pcv.threshold.custom_range(img=blurred_img,
+                                                  lower_thresh=lower_green,
+                                                  upper_thresh=upper_green,
+                                                  channel='HSV')
+
+    return hsv, mask, masked_img, blurred_img
+
+
 def gaussian_blur_transform(img):
     """Apply Gaussian blur to reduce noise"""
     gray_img = pcv.rgb2gray(img)
@@ -27,19 +47,10 @@ def gaussian_blur_transform(img):
 
 def mask_transform(img):
     """Create a mask to isolate the disease (non-green) parts of the leaf"""
-    # Isolate healthy green parts using 'a' channel (Green-Magenta axis)
-    a = pcv.rgb2gray_lab(rgb_img=img, channel='a')
-    mask_green = pcv.threshold.binary(gray_img=a, threshold=108,
-                                      object_type='dark')
-
-    # Combine: Disease = (Plant) AND (NOT Green)
-    mask_not_green = pcv.invert(gray_img=mask_green)
-    mask_fill = pcv.fill(bin_img=mask_not_green, size=25)
-
-    # Apply mask to show only disease spots on black background
-    masked = pcv.apply_mask(img=img, mask=mask_fill, mask_color='white')
-
-    return masked
+    _, mask, _, _ = plant_mask(img, lower_green=(35, 40, 40))
+    # Invert mask to get non-green (diseased) areas
+    # mask = pcv.invert(mask)
+    return mask
 
 
 def object_analyse(img, mask):
@@ -60,13 +71,24 @@ def object_analyse(img, mask):
     return analysis_image
 
 
-def roi_extraction(img, mask):
+def roi_contour_extraction(original_img, mask):
     """Extract and visualize ROI"""
-    # Create a bounding box around the leaf
-    x, y, w, h = cv2.boundingRect(mask)
-    roi_img = img.copy()
-    cv2.rectangle(roi_img, (x, y), (x+w, y+h), (0, 255, 0), 5)
-    return roi_img
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    roi_contours = original_img.copy()
+    cv2.drawContours(roi_contours, contours, -1, (255, 0, 0), 3)
+
+    # Calculate metrics
+    total_area = sum(cv2.contourArea(c) for c in contours)
+    total_perimeter = sum(cv2.arcLength(c, True) for c in contours)
+
+    shape_analysis = roi_contours.copy()
+    cv2.putText(shape_analysis, f"Area: {int(total_area)} px²",
+                (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+    cv2.putText(shape_analysis, f"Perimeter: {int(total_perimeter)} px",
+                (20, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+
+    return roi_contours, shape_analysis
+
 
 
 def pseudolandmarks_transform(img, mask):
@@ -137,7 +159,7 @@ def color_histogram_transform(img, mask):
     def match_width(target_img, source_img):
         if source_img is None:
             return target_img
-        h_t, w_t = target_img.shape[:2]
+        _, w_t = target_img.shape[:2]
         h_s, w_s = source_img.shape[:2]
         if w_t != w_s:
             scale = w_t / w_s
@@ -154,83 +176,106 @@ def color_histogram_transform(img, mask):
     return final_hist_img
 
 
-def plant_mask(img):
-    """Create a mask to isolate the plant from the background"""
-    b_channel = pcv.rgb2gray_hsv(rgb_img=img, channel='s')
-    # Use automatic triangle thresholding instead of fixed threshold
-    b_thresh = pcv.threshold.triangle(gray_img=b_channel, object_type='light',
-                                      xstep=10)
-    b_clean = pcv.fill(bin_img=b_thresh, size=500)
-
-    # Fill holes
-    b_inv = pcv.invert(gray_img=b_clean)
-    b_filled_inv = pcv.fill(bin_img=b_inv, size=1000)
-    b_filled = pcv.invert(gray_img=b_filled_inv)
-
-    smooth_edge = pcv.median_blur(gray_img=b_filled, ksize=5)
-    return smooth_edge
-
-
-def process_single_image(image_path, output_path):
+def process_single_image(settings, image_path, output_path):
     """Process a single image and display all 6 transformations"""
     # Preprocessing - Mask background
-    img, _, _ = pcv.readimage(filename=image_path)
-    if img is None:
+    original_img, _, _ = pcv.readimage(filename=image_path)
+    if original_img is None:
         print(f"Error: Could not load image from {image_path}")
         return
 
     print(f"Processing image: {image_path}")
-    print(f"Image shape: {img.shape}")
+    print(f"Image shape: {original_img.shape}")
 
-    mask = plant_mask(img)
-    only_plant = pcv.apply_mask(img=img, mask=mask, mask_color='white')
+    hsv, mask, masked_img, blurred_img = plant_mask(original_img)
+    only_plant = pcv.apply_mask(img=original_img, mask=mask, mask_color='black')
+    diseases_mask = mask_transform(only_plant)
 
-    # Apply all transformations
     blur_img = gaussian_blur_transform(only_plant)
-    masked_img = mask_transform(only_plant)
-
-    # Run newly implemented transformations
-    obj_img = object_analyse(img, mask)
-    roi_img = roi_extraction(img, mask)
-    landmark_img = pseudolandmarks_transform(img, mask)
-    hist_img = color_histogram_transform(img, mask)
-
-    # Create figure with subplots
-    fig, axes = plt.subplots(3, 3, figsize=(20, 15))
-    fig.suptitle(f'PlantCV Feature Extraction - '
-                 f'{os.path.basename(image_path)}',
-                 fontsize=16, fontweight='bold')
+    obj_img = object_analyse(original_img, diseases_mask)
+    roi_contours, roi_analyse = roi_contour_extraction(original_img, mask)
+    landmark_img = pseudolandmarks_transform(original_img, mask)
+    hist_img = color_histogram_transform(original_img, mask)
 
     # Display images (convert BGR to RGB for matplotlib)
-    # mask is grayscale, others are BGR
-    transformations = [
-        (cv2.cvtColor(img, cv2.COLOR_BGR2RGB), 'Original Image'),
-        (cv2.cvtColor(mask, cv2.COLOR_GRAY2RGB), 'Plant Mask'),
-        (cv2.cvtColor(only_plant, cv2.COLOR_BGR2RGB), 'Preprocess image'),
-        (cv2.cvtColor(blur_img, cv2.COLOR_BGR2RGB), 'Gaussian Blur'),
-        (cv2.cvtColor(masked_img, cv2.COLOR_BGR2RGB), 'Disease Masking'),
-        (cv2.cvtColor(roi_img, cv2.COLOR_BGR2RGB), 'ROI Extraction'),
-        (cv2.cvtColor(obj_img, cv2.COLOR_BGR2RGB), 'Object Analysis'),
-        (cv2.cvtColor(landmark_img, cv2.COLOR_BGR2RGB), 'Pseudolandmarks'),
-        (cv2.cvtColor(hist_img, cv2.COLOR_BGR2RGB), 'Color Histogram')
-    ]
+    if settings.debug:
+        original_img = cv2.cvtColor(original_img, cv2.COLOR_BGR2RGB)
+        blurred_img = cv2.cvtColor(blurred_img, cv2.COLOR_BGR2RGB)
+        mask = cv2.cvtColor(mask, cv2.COLOR_GRAY2RGB)
+        masked_img = cv2.cvtColor(masked_img, cv2.COLOR_BGR2RGB)
+        only_plant = cv2.cvtColor(only_plant, cv2.COLOR_BGR2RGB)
 
-    for ax, (img_data, title) in zip(axes.flat, transformations):
-        ax.imshow(img_data)
-        ax.set_title(title, fontsize=12, fontweight='bold')
-        ax.axis('off')
+        # Visualize the HSV channels and resulting mask
+        fig, axes = plt.subplots(2, 4, figsize=(16, 8))
+        # Row 1: Original, Blurred, HSV channels
+        axes[0, 0].imshow(original_img)
+        axes[0, 0].set_title('Original')
+        axes[0, 0].axis('off')
 
-    plt.tight_layout()
-    plt.savefig(output_path)
-    # Explicitly close the figure to prevent memory warning
-    plt.close(fig)
+        axes[0, 1].imshow(blurred_img)
+        axes[0, 1].set_title('Blurred (k=15)')
+        axes[0, 1].axis('off')
+
+        axes[0, 2].imshow(hsv[:, :, 0], cmap='hsv')
+        axes[0, 2].set_title('Hue Channel (Color)')
+        axes[0, 2].axis('off')
+
+        axes[0, 3].imshow(hsv[:, :, 1], cmap='gray')
+        axes[0, 3].set_title('Saturation Channel')
+        axes[0, 3].axis('off')
+
+        # Row 2: Value channel, Green mask, Mask overlay, Comparison
+        axes[1, 0].imshow(hsv[:, :, 2], cmap='gray')
+        axes[1, 0].set_title('Value Channel (Brightness)')
+        axes[1, 0].axis('off')
+
+        axes[1, 1].imshow(mask, cmap='gray')
+        axes[1, 1].set_title('HSV Green Mask')
+        axes[1, 1].axis('off')
+
+        # Overlay mask on original
+        overlay = original_img.copy()
+        overlay[mask == 0] = overlay[mask == 0] // 2  # Darken background
+        axes[1, 2].imshow(overlay)
+        axes[1, 2].set_title('Mask Overlay')
+        axes[1, 2].axis('off')
+
+        plt.tight_layout()
+        plt.savefig(output_path)
+        plt.close(fig)
+    else:
+        transformations = [
+            (cv2.cvtColor(original_img, cv2.COLOR_BGR2RGB), 'Original Image'),
+            (cv2.cvtColor(mask, cv2.COLOR_GRAY2RGB), 'Plant Mask'),
+            (cv2.cvtColor(only_plant, cv2.COLOR_BGR2RGB), 'Preprocess image'),
+            (cv2.cvtColor(blur_img, cv2.COLOR_BGR2RGB), 'Gaussian Blur'),
+            (cv2.cvtColor(roi_contours, cv2.COLOR_BGR2RGB), 'ROI Contour Extraction'),
+            (cv2.cvtColor(roi_analyse, cv2.COLOR_BGR2RGB), 'ROI Analysis'),
+            (cv2.cvtColor(obj_img, cv2.COLOR_BGR2RGB), 'Object Analysis'),
+            (cv2.cvtColor(landmark_img, cv2.COLOR_BGR2RGB), 'Pseudolandmarks'),
+            (cv2.cvtColor(hist_img, cv2.COLOR_BGR2RGB), 'Color Histogram')
+        ]
+
+        # Create figure with subplots
+        fig, axes = plt.subplots(3, 3, figsize=(20, 15))
+        fig.suptitle(f'PlantCV Feature Extraction - '
+                     f'{os.path.basename(image_path)}',
+                     fontsize=16, fontweight='bold')
+
+        for ax, (img_data, title) in zip(axes.flat, transformations):
+            ax.imshow(img_data)
+            ax.set_title(title, fontsize=12, fontweight='bold')
+            ax.axis('off')
+
+        plt.tight_layout()
+        plt.savefig(output_path)
+        plt.close(fig)
 
     print(f"Saved result to {output_path}")
     print("Transformation complete!")
 
 
 def main():
-    """Main function with argument parsing"""
     parser = argparse.ArgumentParser(
         description='Image Transformation using PlantCV - '
                     'Extract 6 features from plant leaf images')
@@ -240,6 +285,7 @@ def main():
                         help='Path to source directory')
     parser.add_argument('-dst', '--destination', type=str,
                         help='Path to destination directory')
+    parser.add_argument('-d', '--debug', action='store_true')
     args = parser.parse_args()
 
     if args.image is None and args.source is None:
@@ -260,7 +306,7 @@ def main():
         for file in os.listdir(args.source):
             output_filename = f"transformed_{os.path.basename(file)}"
             output_path = os.path.join(args.destination, output_filename)
-            process_single_image(os.path.join(args.source, file), output_path)
+            process_single_image(args, os.path.join(args.source, file), output_path)
 
     # Process single image
     if args.image is not None:
@@ -272,7 +318,7 @@ def main():
             print(f"Error: Image file '{args.image}' not found!")
             exit(1)
         output_path = f"transformed_{os.path.basename(args.image)}"
-        process_single_image(args.image, output_path)
+        process_single_image(args, args.image, output_path)
 
 
 if __name__ == '__main__':
