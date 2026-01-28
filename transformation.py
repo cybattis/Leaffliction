@@ -6,21 +6,22 @@ Extracts 6 features from plant leaf images
 import os
 import argparse
 import matplotlib
-
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import cv2
-import numpy as np
 
-# Import libraries
 from plantcv import plantcv as pcv
+matplotlib.use('Agg')
 
 
 def gaussian_blur_transform(img):
     """Apply Gaussian blur to reduce noise"""
     gray_img = pcv.rgb2gray(img)
-    threshold_dark = pcv.threshold.binary(gray_img=gray_img, threshold=100, object_type='dark')
-    gaussian_img = pcv.gaussian_blur(img=threshold_dark, ksize=(5, 5), sigma_x=0)
+    threshold_dark = pcv.threshold.binary(gray_img=gray_img,
+                                          threshold=100,
+                                          object_type='dark')
+    gaussian_img = pcv.gaussian_blur(img=threshold_dark,
+                                     ksize=(5, 5),
+                                     sigma_x=0)
     return gaussian_img
 
 
@@ -28,7 +29,8 @@ def mask_transform(img):
     """Create a mask to isolate the disease (non-green) parts of the leaf"""
     # Isolate healthy green parts using 'a' channel (Green-Magenta axis)
     a = pcv.rgb2gray_lab(rgb_img=img, channel='a')
-    mask_green = pcv.threshold.binary(gray_img=a, threshold=108, object_type='dark')
+    mask_green = pcv.threshold.binary(gray_img=a, threshold=108,
+                                      object_type='dark')
 
     # Combine: Disease = (Plant) AND (NOT Green)
     mask_not_green = pcv.invert(gray_img=mask_green)
@@ -70,7 +72,8 @@ def roi_extraction(img, mask):
 def pseudolandmarks_transform(img, mask):
     """Extract pseudolandmarks from the object"""
     try:
-        left, right, center_h = pcv.homology.x_axis_pseudolandmarks(img=img, mask=mask)
+        left, right, center_h = pcv.homology.x_axis_pseudolandmarks(img=img,
+                                                                    mask=mask)
     except (RuntimeError, ValueError) as e:
         print(f"Warning: Pseudolandmarks failed: {e}")
         return img
@@ -84,7 +87,7 @@ def pseudolandmarks_transform(img, mask):
                 if len(pt) > 0 and hasattr(pt[0], '__len__'):
                     x, y = pt[0]
                 else:
-                    x, y = pt if len(pt) == 2 else (0,0)
+                    x, y = pt if len(pt) == 2 else (0, 0)
                 cv2.circle(landmarks_img, (int(x), int(y)), 5, color, -1)
 
     draw_points(left, (255, 0, 0))
@@ -101,19 +104,22 @@ def color_histogram_transform(img, mask):
     """
     # 1. RGB Histogram (Original Image)
     # pcv.visualize.histogram plots pixel counts for channels
-    hist_rgb = pcv.visualize.histogram(img=img, mask=mask, title="RGB Histogram")
+    hist_rgb = pcv.visualize.histogram(img=img, mask=mask,
+                                       title="RGB Histogram")
     filename_rgb = "temp_hist_rgb.png"
     hist_rgb.save(filename_rgb)
 
     # 2. HSV Histogram (Hue, Saturation, Value)
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    hist_hsv = pcv.visualize.histogram(img=hsv, mask=mask, title="HSV Histogram")
+    hist_hsv = pcv.visualize.histogram(img=hsv, mask=mask,
+                                       title="HSV Histogram")
     filename_hsv = "temp_hist_hsv.png"
     hist_hsv.save(filename_hsv)
 
     # 3. LAB Histogram (Lightness, Green-Magenta, Blue-Yellow)
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2Lab)
-    hist_lab = pcv.visualize.histogram(img=lab, mask=mask, title="LAB Histogram")
+    hist_lab = pcv.visualize.histogram(img=lab, mask=mask,
+                                       title="LAB Histogram")
     filename_lab = "temp_hist_lab.png"
     hist_lab.save(filename_lab)
 
@@ -129,7 +135,8 @@ def color_histogram_transform(img, mask):
 
     # Helper to resize images to match width of the first image
     def match_width(target_img, source_img):
-        if source_img is None: return target_img
+        if source_img is None:
+            return target_img
         h_t, w_t = target_img.shape[:2]
         h_s, w_s = source_img.shape[:2]
         if w_t != w_s:
@@ -151,7 +158,8 @@ def plant_mask(img):
     """Create a mask to isolate the plant from the background"""
     b_channel = pcv.rgb2gray_hsv(rgb_img=img, channel='s')
     # Use automatic triangle thresholding instead of fixed threshold
-    b_thresh = pcv.threshold.triangle(gray_img=b_channel, object_type='light', xstep=10)
+    b_thresh = pcv.threshold.triangle(gray_img=b_channel, object_type='light',
+                                      xstep=10)
     b_clean = pcv.fill(bin_img=b_thresh, size=500)
 
     # Fill holes
@@ -189,7 +197,8 @@ def process_single_image(image_path, output_path):
 
     # Create figure with subplots
     fig, axes = plt.subplots(3, 3, figsize=(20, 15))
-    fig.suptitle(f'PlantCV Feature Extraction - {os.path.basename(image_path)}', 
+    fig.suptitle(f'PlantCV Feature Extraction - '
+                 f'{os.path.basename(image_path)}',
                  fontsize=16, fontweight='bold')
 
     # Display images (convert BGR to RGB for matplotlib)
@@ -223,11 +232,14 @@ def process_single_image(image_path, output_path):
 def main():
     """Main function with argument parsing"""
     parser = argparse.ArgumentParser(
-        description='Image Transformation using PlantCV - Extract 6 features from plant leaf images'
-    )
-    parser.add_argument('-i', '--image', type=str, help='Path to input image')
-    parser.add_argument('-src', '--source', type=str, help='Path to source directory')
-    parser.add_argument('-dst', '--destination', type=str, help='Path to destination directory')
+        description='Image Transformation using PlantCV - '
+                    'Extract 6 features from plant leaf images')
+    parser.add_argument('-i', '--image', type=str,
+                        help='Path to input image')
+    parser.add_argument('-src', '--source', type=str,
+                        help='Path to source directory')
+    parser.add_argument('-dst', '--destination', type=str,
+                        help='Path to destination directory')
     args = parser.parse_args()
 
     if args.image is None and args.source is None:
@@ -240,7 +252,8 @@ def main():
             print("Error: Cannot process both an image and a directory.")
             exit(1)
         if args.destination is None:
-            print("Error: Destination directory must be specified when processing a directory.")
+            print("Error: Destination directory must be "
+                  "specified when processing a directory.")
             exit(1)
         if not os.path.exists(args.source):
             print(f"Error: Source directory '{args.source}' not found!")
@@ -252,7 +265,8 @@ def main():
     # Process single image
     if args.image is not None:
         if args.destination is not None:
-            print("Error: Destination directory must not be specified when processing a single image.")
+            print("Error: Destination directory must not "
+                  "be specified when processing a single image.")
             exit(1)
         if not os.path.exists(args.image):
             print(f"Error: Image file '{args.image}' not found!")
@@ -264,4 +278,3 @@ def main():
 if __name__ == '__main__':
     print("PlantCV ", pcv.__version__)
     main()
-
