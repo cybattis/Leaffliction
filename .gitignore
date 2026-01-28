@@ -3,7 +3,8 @@ charts/
 visualization/
 augmented_apple/
 augmented_grape/
-transformations
+transformations/
+predictions/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

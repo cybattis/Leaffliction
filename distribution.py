@@ -420,8 +420,8 @@ def parse_arguments() -> argparse.Namespace:
         epilog="""
 Examples:
   python distribution.py leaves/images
-  python distribution.py leaves/images --output charts/
-  python distribution.py leaves/images --no-show --output charts/
+  python distribution.py leaves/images -o my_charts/
+  python distribution.py leaves/images --show
         """
     )
 
@@ -434,14 +434,14 @@ Examples:
     parser.add_argument(
         "-o", "--output",
         type=str,
-        default=None,
-        help="Directory to save generated charts."
+        default="charts",
+        help="Directory to save generated charts (default: charts/)."
     )
 
     parser.add_argument(
-        "--no-show",
+        "--show",
         action="store_true",
-        help="Don't display charts (only save if output is specified)."
+        help="Display charts during execution (default: save only)."
     )
 
     return parser.parse_args()
@@ -468,14 +468,12 @@ def main() -> int:
         # Print summary
         print_summary(distribution)
 
-        # Determine whether to show charts
-        show = not args.no_show
+        # Determine whether to show charts (default: don't show)
+        show = args.show
 
         # Generate overall combined chart (pie + bar for all classes)
-        overall_output = None
-        if args.output:
-            os.makedirs(args.output, exist_ok=True)
-            overall_output = os.path.join(args.output, "overall.png")
+        os.makedirs(args.output, exist_ok=True)
+        overall_output = os.path.join(args.output, "overall.png")
 
         generate_overall_chart(distribution, overall_output, show)
 
