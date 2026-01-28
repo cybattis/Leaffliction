@@ -27,7 +27,7 @@ This plan outlines the steps to implement the Leaffliction project, which involv
 
 ### Part 3: Image Transformation
 - [x] Create `transformation.py`.
-- [ ] Implement feature extraction techniques (using `plantcv` or `opencv`):
+- [ ] Implement feature extraction techniques (using `plantcv`):
     - Gaussian Blur
     - Masking
     - ROI Extraction
