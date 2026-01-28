@@ -4,11 +4,13 @@ import argparse
 import sys
 import shutil
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Any
 import random
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
+from cv2 import Mat
+from numpy import ndarray, dtype, integer, floating
 
 IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.webp'}
 TARGET_SIZE = (224, 224)
@@ -106,7 +108,7 @@ def create_augmentation_functions() -> Dict[str, callable]:
     }
 
 
-def load_and_preprocess_image(image_path: str) -> np.ndarray:
+def load_and_preprocess_image(image_path: str) -> ndarray | None | Any:
     """
     Load and preprocess an image for augmentation.
 
@@ -367,7 +369,7 @@ def visualize_augmentations(image_path: str) -> None:
     cols = 3
     rows = (num_augmentations + cols - 1) // cols
 
-    fig, axes = plt.subplots(rows, cols, figsize=(15, 5 * rows))
+    _, axes = plt.subplots(rows, cols, figsize=(15, 5 * rows))
     axes = axes.flatten()
 
     for i, (aug_name, aug_function) in enumerate(aug_functions.items()):
