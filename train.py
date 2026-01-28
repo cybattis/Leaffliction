@@ -4,7 +4,9 @@ import os
 
 import argparse
 import json
+import subprocess
 import sys
+import zipfile
 from datetime import datetime
 from typing import Dict, List, Tuple
 
@@ -34,6 +36,121 @@ IMAGE_SIZE = (224, 224)
 BATCH_SIZE = 32
 EPOCHS = 50
 LEARNING_RATE = 0.001
+
+
+def run_augmentation(
+    input_dir: str,
+    output_dir: str,
+    plant_type: str
+) -> bool:
+    """
+    Run augmentation.py to balance the dataset.
+
+    Args:
+        input_dir: Input directory containing original images.
+        output_dir: Output directory for augmented images.
+        plant_type: Plant type ('apple' or 'grape').
+
+    Returns:
+        True if augmentation succeeded, False otherwise.
+    """
+    print("\n" + "=" * 60)
+    print("Running data augmentation to balance dataset...")
+    print("=" * 60)
+
+    # Build the augmentation command
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    augmentation_script = os.path.join(script_dir, "augmentation.py")
+
+    if not os.path.exists(augmentation_script):
+        print(f"Error: augmentation.py not found at {augmentation_script}")
+        return False
+
+    cmd = [
+        sys.executable,
+        augmentation_script,
+        plant_type,  # positional argument
+        "-i", input_dir,
+        "-o", output_dir
+    ]
+
+    print(f"Command: {' '.join(cmd)}")
+
+    try:
+        subprocess.run(
+            cmd,
+            check=True,
+            capture_output=False
+        )
+        print("\n✅ Augmentation completed successfully!")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"\nAugmentation failed with exit code {e.returncode}")
+        return False
+    except Exception as e:
+        print(f"\nError running augmentation: {e}")
+        return False
+
+
+def create_training_zip(
+    output_dir: str,
+    augmented_dir: str,
+    model_name: str,
+    plant_type: str
+) -> str:
+    """
+    Create a zip file containing the model and augmented images.
+
+    Args:
+        output_dir: Directory containing model artifacts.
+        augmented_dir: Directory containing augmented images.
+        model_name: Name of the model.
+        plant_type: Plant type ('apple' or 'grape').
+
+    Returns:
+        Path to the created zip file.
+    """
+    print("\n" + "=" * 60)
+    print("Creating training package (.zip)...")
+    print("=" * 60)
+
+    zip_filename = f"{plant_type}_model.zip"
+    zip_path = os.path.join(os.path.dirname(output_dir), zip_filename)
+
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        # Add model files from output_dir
+        print(f"Adding model artifacts from {output_dir}...")
+        for root, dirs, files in os.walk(output_dir):
+            for file in files:
+                file_path = os.path.join(root, file)
+                arcname = os.path.join(
+                    "model",
+                    os.path.relpath(file_path, output_dir)
+                )
+                zipf.write(file_path, arcname)
+                print(f"  + {arcname}")
+
+        # Add augmented images
+        print(f"\nAdding augmented images from {augmented_dir}...")
+        image_count = 0
+        for root, dirs, files in os.walk(augmented_dir):
+            for file in files:
+                if file.lower().endswith(('.jpg', '.jpeg', '.png')):
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.join(
+                        "augmented_images",
+                        os.path.relpath(file_path, augmented_dir)
+                    )
+                    zipf.write(file_path, arcname)
+                    image_count += 1
+
+        print(f"  Added {image_count} images")
+
+    zip_size_mb = os.path.getsize(zip_path) / (1024 * 1024)
+    print(f"\n✅ Training package created: {zip_path}")
+    print(f"   Size: {zip_size_mb:.1f} MB")
+
+    return zip_path
 
 
 def load_dataset(
@@ -428,7 +545,7 @@ def parse_arguments() -> argparse.Namespace:
 Examples:
   python train.py apple
   python train.py grape
-  python train.py apple -i custom_data/ -o models/
+  python train.py apple -s leaves/images -o models/
   python train.py grape -e 100 -b 64
         """
     )
@@ -441,10 +558,17 @@ Examples:
     )
 
     parser.add_argument(
-        "-i", "--input-dir",
+        "-s", "--source-dir",
+        type=str,
+        default="leaves/images",
+        help="Source directory with original images (default: leaves/images)"
+    )
+
+    parser.add_argument(
+        "-a", "--augmented-dir",
         type=str,
         default=None,
-        help="Input directory with balanced dataset "
+        help="Directory for augmented images "
              "(default: augmented_{plant_type}/)"
     )
 
@@ -486,9 +610,9 @@ def main() -> int:
     BATCH_SIZE = args.batch_size
     EPOCHS = args.epochs
 
-    # Set default input directory
-    if args.input_dir is None:
-        args.input_dir = f"augmented_{args.plant_type}/"
+    # Set default augmented directory
+    if args.augmented_dir is None:
+        args.augmented_dir = f"augmented_{args.plant_type}/"
 
     # Create model name
     model_name = f"{args.plant_type}_disease_model"
@@ -498,13 +622,23 @@ def main() -> int:
     print("Leaffliction - Plant Disease Classification Training")
     print("=" * 60)
     print(f"Plant type: {args.plant_type}")
-    print(f"Input directory: {args.input_dir}")
+    print(f"Source directory: {args.source_dir}")
+    print(f"Augmented directory: {args.augmented_dir}")
     print(f"Output directory: {output_dir}")
     print(f"Epochs: {args.epochs}")
     print(f"Batch size: {args.batch_size}")
     print("=" * 60)
 
     try:
+        # Step 1: Run augmentation to balance dataset
+        if not run_augmentation(
+            args.source_dir,
+            args.augmented_dir,
+            args.plant_type
+        ):
+            print("Failed to run augmentation.", file=sys.stderr)
+            return 1
+
         # Check for GPU
         gpus = tf.config.list_physical_devices('GPU')
         if gpus:
@@ -514,9 +648,9 @@ def main() -> int:
         else:
             print("\nNo GPU found. Training will use CPU.")
 
-        # Load dataset
+        # Step 2: Load dataset
         train_gen, val_gen, class_names = load_dataset(
-            args.input_dir,
+            args.augmented_dir,
             validation_split=0.2
         )
 
@@ -525,13 +659,13 @@ def main() -> int:
             print(f"\nWarning: Only {val_gen.samples} validation samples. "
                   f"Recommended minimum is 100.")
 
-        # Build model
+        # Step 3: Build model
         model = build_model(num_classes=len(class_names))
 
         # Create callbacks
         callbacks = create_callbacks(output_dir, model_name)
 
-        # Train model
+        # Step 4: Train model
         print("\n" + "=" * 60)
         print("Training with frozen EfficientNetB0 base")
         print("=" * 60)
@@ -539,17 +673,25 @@ def main() -> int:
             model, train_gen, val_gen, callbacks, epochs=args.epochs
         )
 
-        # Plot training history
+        # Step 5: Plot training history
         plot_training_history(history, output_dir, model_name)
 
-        # Evaluate model
+        # Step 6: Evaluate model
         metrics = evaluate_model(
             model, val_gen, class_names, output_dir, model_name
         )
 
-        # Save all artifacts
+        # Step 7: Save all artifacts
         save_model_artifacts(
             model, class_names, history, metrics, output_dir, model_name
+        )
+
+        # Step 8: Create zip package with model and augmented images
+        zip_path = create_training_zip(
+            output_dir,
+            args.augmented_dir,
+            model_name,
+            args.plant_type
         )
 
         print("\n" + "=" * 60)
@@ -557,20 +699,19 @@ def main() -> int:
         print("=" * 60)
         print(f"Final Validation Accuracy: {metrics['accuracy']:.4f}")
         print(f"Model saved to: {output_dir}")
+        print(f"Training package: {zip_path}")
         print("=" * 60)
 
         # Check if target accuracy achieved
         if metrics['accuracy'] >= 0.90:
             print("✅ Target accuracy (>90%) achieved!")
         else:
-            print(f"⚠️  Accuracy {metrics['accuracy']:.1%} below 90% target. "
-                  "Consider fine-tuning or more training.")
+            print(f"⚠️  Accuracy {metrics['accuracy']:.1%} below 90% target.")
 
         return 0
 
     except FileNotFoundError as e:
         print(f"\nError: {e}", file=sys.stderr)
-        print("Please run augmentation.py first.")
         return 1
     except Exception as e:
         print(f"\nUnexpected error: {e}", file=sys.stderr)
