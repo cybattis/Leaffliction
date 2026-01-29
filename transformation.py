@@ -345,15 +345,20 @@ def process_single_image(settings, image_path: str, output_path: str):
 def main():
     parser = argparse.ArgumentParser(
         description='Image Transformation using PlantCV - '
-                    'Extract 6 features from plant leaf images')
-    parser.add_argument('-i', '--image', type=str, help='Path to input image')
-    parser.add_argument('-src', '--source', type=str,
+                    'Extract 6 features from plant leaf images'
+    )
+    parser.add_argument('-i', '--image', type=str, metavar='PATH',
+                        help='Path to input image')
+    parser.add_argument('-src', '--source', type=str, metavar='DIR',
                         help='Path to source directory')
-    parser.add_argument('-dst', '--destination', type=str,
+    parser.add_argument('-dst', '--destination', type=str, metavar='DIR',
                         help='Path to destination directory')
-    parser.add_argument('-d', '--debug', action='store_true')
-    parser.add_argument('-m', '--mask', action='store_true')
-    parser.add_argument('-z', '--zip', action='store_true')
+    parser.add_argument('-d', '--debug', action='store_true',
+                        help='Enable debug mode')
+    parser.add_argument('-m', '--mask', action='store_true',
+                        help='Save binary mask')
+    parser.add_argument('-z', '--zip', action='store_true',
+                        help='Run in zip mode')
     args = parser.parse_args()
 
     if args.image is None and args.source is None:

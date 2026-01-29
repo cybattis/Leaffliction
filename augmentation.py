@@ -509,7 +509,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    # Décommenter pour reproduire une seed
+    # Uncomment to get a seed
     # random.seed(42)
     # np.random.seed(42)
 
