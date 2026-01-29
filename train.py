@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import os
+from meta import os
 
 import argparse
 import json
@@ -12,6 +12,7 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 import matplotlib.pyplot as plt
+
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
@@ -28,8 +29,6 @@ from sklearn.metrics import (
     ConfusionMatrixDisplay
 )
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # 0:all, 1:info, 2:warning, 3:error
-os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'  # Disable oneDNN optimizations msg
 
 # Constants
 IMAGE_SIZE = (224, 224)

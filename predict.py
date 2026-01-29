@@ -475,7 +475,7 @@ def run_transformation_for_mask(image_path: str) -> Optional[str]:
         # Look for the generated mask file in visualization/
         image_name = os.path.splitext(os.path.basename(image_path))[0]
         mask_path = f"visualization/transformed_{image_name}_mask.jpg"
-        
+
         if os.path.exists(mask_path):
             return mask_path
         else:
@@ -522,7 +522,7 @@ def create_side_by_side_visualization(
 
     # Create figure
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
-    
+
     # Display original image
     ax1.imshow(original_rgb)
     ax1.set_title('Original Image', fontsize=14, fontweight='bold')
@@ -545,7 +545,7 @@ def create_side_by_side_visualization(
     plt.tight_layout()
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
     plt.close()
-    
+
     print(f"Side-by-side visualization saved to: {output_path}")
 
 
@@ -563,7 +563,7 @@ def predict_single_image_with_visualization(
         class_names: List of class names.
     """
     print(f"\nProcessing single image: {image_path}")
-    
+
     # Make prediction on original image
     prediction = predict_single_image(model, image_path, class_names)
     if prediction is None:
@@ -582,7 +582,7 @@ def predict_single_image_with_visualization(
     # Create output path for visualization
     viz_dir = "visualization"
     os.makedirs(viz_dir, exist_ok=True)
-    
+
     image_name = os.path.splitext(os.path.basename(image_path))[0]
     output_path = os.path.join(viz_dir, f"prediction_{image_name}.jpg")
 
@@ -663,7 +663,7 @@ def main() -> int:
         print("Error: Must specify either a folder path or use -i for "
               "single image")
         return 1
-    
+
     if args.image and args.input:
         print("Error: Cannot specify both folder and single image")
         return 1
@@ -683,7 +683,7 @@ def main() -> int:
             if not image_path.suffix.lower() in IMAGE_EXTENSIONS:
                 print(f"Error: Unsupported image format: {image_path.suffix}")
                 return 1
-                
+
             predict_single_image_with_visualization(
                 model, str(image_path), class_names
             )

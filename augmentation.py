@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 import argparse
 import sys
 import shutil
@@ -9,8 +8,7 @@ import random
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
-from cv2 import Mat
-from numpy import ndarray, dtype, integer, floating
+from numpy import ndarray
 
 IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.webp'}
 TARGET_SIZE = (224, 224)
