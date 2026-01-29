@@ -10,7 +10,6 @@ import matplotlib.pyplot as plt
 import cv2
 
 from plantcv import plantcv as pcv
-from plantcv.plantcv import outputs
 
 matplotlib.use('Agg')
 
@@ -222,11 +221,11 @@ def process_single_image(settings, image_path: str, output_path: str):
 
     file, ext = os.path.splitext(os.path.basename(image_path))
     output_image_name = f"transformed_{file}{ext.lower()}"
-    histogram_image_name = f"transformed_{file}_histogram{ext.lower()}"
+    histo_img_name = f"transformed_{file}_histogram{ext.lower()}"
     mask_image_name = f"transformed_{file}_mask{ext.lower()}"
 
     output_path = os.path.join(os.path.dirname(output_path), output_image_name)
-    histogram_path = os.path.join(os.path.dirname(output_path), histogram_image_name)
+    histogram_path = os.path.join(os.path.dirname(output_path), histo_img_name)
     mask_path = os.path.join(os.path.dirname(output_path), mask_image_name)
 
     # Preprocessing - Mask background
