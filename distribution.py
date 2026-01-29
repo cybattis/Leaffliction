@@ -82,9 +82,9 @@ def count_images(path: str) -> int:
     dir_path = Path(path)
 
     for file_path in dir_path.iterdir():
-        if file_path.is_file():
-            if file_path.suffix.lower() in IMAGE_EXTENSIONS:
-                count += 1
+        if (file_path.is_file()
+                and file_path.suffix.lower() in IMAGE_EXTENSIONS):
+            count += 1
 
     return count
 
@@ -144,7 +144,7 @@ def generate_combined_chart(
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
 
     # Pie chart (left)
-    wedges, texts, autotexts = ax1.pie(
+    _, texts, autotexts = ax1.pie(
         sizes,
         labels=labels,
         autopct=lambda pct: f'{pct:.1f}%',
@@ -273,7 +273,7 @@ def generate_overall_chart(
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 7))
 
     # Pie chart (left) with black borders
-    wedges, texts, autotexts = ax1.pie(
+    _, texts, autotexts = ax1.pie(
         sizes,
         labels=labels,
         autopct=lambda pct: f'{pct:.1f}%',
