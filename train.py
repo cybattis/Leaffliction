@@ -82,7 +82,7 @@ def run_augmentation(
             check=True,
             capture_output=False
         )
-        print("\n✅ Augmentation completed successfully!")
+        print("\nAugmentation completed successfully!")
         return True
     except subprocess.CalledProcessError as e:
         print(f"\nAugmentation failed with exit code {e.returncode}")
@@ -92,18 +92,72 @@ def run_augmentation(
         return False
 
 
+def run_transformation(
+    input_dir: str,
+    output_dir: str
+) -> bool:
+    """
+    Run transformation.py to extract features from augmented images.
+
+    Args:
+        input_dir: Input directory containing augmented images.
+        output_dir: Output directory for transformed images.
+
+    Returns:
+        True if transformation succeeded, False otherwise.
+    """
+    print("\n" + "=" * 60)
+    print("Running image transformations to extract features...")
+    print("=" * 60)
+
+    # Build the transformation command
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    transformation_script = os.path.join(script_dir, "transformation.py")
+
+    if not os.path.exists(transformation_script):
+        print(f"Error: transformation.py not found at {transformation_script}")
+        return False
+
+    cmd = [
+        sys.executable,
+        transformation_script,
+        "-src", input_dir,
+        "-dst", output_dir,
+        "-z"  # zip flag to skip individual histogram files
+    ]
+
+    print(f"Command: {' '.join(cmd)}")
+
+    try:
+        subprocess.run(
+            cmd,
+            check=True,
+            capture_output=False
+        )
+        print("\nTransformation completed successfully!")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"\nTransformation failed with exit code {e.returncode}")
+        return False
+    except Exception as e:
+        print(f"\nError running transformation: {e}")
+        return False
+
+
 def create_training_zip(
     output_dir: str,
     augmented_dir: str,
+    transformed_dir: str,
     model_name: str,
     plant_type: str
 ) -> str:
     """
-    Create a zip file containing the model and augmented images.
+    Create a zip file containing model, augmented images, and transformations.
 
     Args:
         output_dir: Directory containing model artifacts.
         augmented_dir: Directory containing augmented images.
+        transformed_dir: Directory containing transformed images.
         model_name: Name of the model.
         plant_type: Plant type ('apple' or 'grape').
 
@@ -145,6 +199,25 @@ def create_training_zip(
                     image_count += 1
 
         print(f"  Added {image_count} images")
+
+        # Add transformed images if directory exists
+        if os.path.exists(transformed_dir):
+            print(f"\nAdding transformed images from {transformed_dir}...")
+            transform_count = 0
+            for root, dirs, files in os.walk(transformed_dir):
+                for file in files:
+                    if file.lower().endswith(('.jpg', '.jpeg', '.png')):
+                        file_path = os.path.join(root, file)
+                        arcname = os.path.join(
+                            "transformed_images",
+                            os.path.relpath(file_path, transformed_dir)
+                        )
+                        zipf.write(file_path, arcname)
+                        transform_count += 1
+            print(f"  Added {transform_count} transformed images")
+        else:
+            print(f"\nSkipping transformed images "
+                  f"(directory not found: {transformed_dir})")
 
     zip_size_mb = os.path.getsize(zip_path) / (1024 * 1024)
     print(f"\n✅ Training package created: {zip_path}")
@@ -543,10 +616,20 @@ def parse_arguments() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  # Train apple model (runs augmentation -> transformation -> training)
   python train.py apple
-  python train.py grape
-  python train.py apple -s leaves/images -o models/
+
+  # Train grape model with custom epochs
   python train.py grape -e 100 -b 64
+
+  # Use custom source and output directories
+  python train.py apple -s leaves/images -o models/
+
+Pipeline:
+  1. Runs augmentation.py to balance the dataset
+  2. Runs transformation.py to extract features from augmented images
+  3. Trains the model on augmented images
+  4. Creates .zip with model + augmented + transformed images
         """
     )
 
@@ -614,6 +697,9 @@ def main() -> int:
     if args.augmented_dir is None:
         args.augmented_dir = f"augmented_{args.plant_type}/"
 
+    # Set transformed directory
+    transformed_dir = f"transformed_{args.plant_type}/"
+
     # Create model name
     model_name = f"{args.plant_type}_disease_model"
     output_dir = os.path.join(args.output_dir, args.plant_type)
@@ -624,20 +710,42 @@ def main() -> int:
     print(f"Plant type: {args.plant_type}")
     print(f"Source directory: {args.source_dir}")
     print(f"Augmented directory: {args.augmented_dir}")
+    print(f"Transformed directory: {transformed_dir}")
     print(f"Output directory: {output_dir}")
     print(f"Epochs: {args.epochs}")
     print(f"Batch size: {args.batch_size}")
     print("=" * 60)
 
     try:
-        # Step 1: Run augmentation to balance dataset
-        if not run_augmentation(
-            args.source_dir,
-            args.augmented_dir,
-            args.plant_type
-        ):
-            print("Failed to run augmentation.", file=sys.stderr)
-            return 1
+        # Step 1: Run augmentation to balance dataset (skip if exists)
+        if (os.path.exists(args.augmented_dir) and
+                os.listdir(args.augmented_dir)):
+            print("\n" + "=" * 60)
+            print("Augmented dataset already exists, skipping augmentation...")
+            print("=" * 60)
+            print(f"Using existing: {args.augmented_dir}")
+        else:
+            if not run_augmentation(
+                args.source_dir,
+                args.augmented_dir,
+                args.plant_type
+            ):
+                print("Failed to run augmentation.", file=sys.stderr)
+                return 1
+
+        # Step 2: Run transformation to extract features (skip if exists)
+        if os.path.exists(transformed_dir) and os.listdir(transformed_dir):
+            print("\n" + "=" * 60)
+            print("Transformed dataset exists, skipping transformation...")
+            print("=" * 60)
+            print(f"Using existing: {transformed_dir}")
+        else:
+            if not run_transformation(
+                args.augmented_dir,
+                transformed_dir
+            ):
+                print("Failed to run transformation.", file=sys.stderr)
+                return 1
 
         # Check for GPU
         gpus = tf.config.list_physical_devices('GPU')
@@ -648,7 +756,7 @@ def main() -> int:
         else:
             print("\nNo GPU found. Training will use CPU.")
 
-        # Step 2: Load dataset
+        # Step 3: Load dataset (use augmented for training, not transformed)
         train_gen, val_gen, class_names = load_dataset(
             args.augmented_dir,
             validation_split=0.2
@@ -659,13 +767,13 @@ def main() -> int:
             print(f"\nWarning: Only {val_gen.samples} validation samples. "
                   f"Recommended minimum is 100.")
 
-        # Step 3: Build model
+        # Step 4: Build model
         model = build_model(num_classes=len(class_names))
 
         # Create callbacks
         callbacks = create_callbacks(output_dir, model_name)
 
-        # Step 4: Train model
+        # Step 5: Train model
         print("\n" + "=" * 60)
         print("Training with frozen EfficientNetB0 base")
         print("=" * 60)
@@ -673,23 +781,24 @@ def main() -> int:
             model, train_gen, val_gen, callbacks, epochs=args.epochs
         )
 
-        # Step 5: Plot training history
+        # Step 6: Plot training history
         plot_training_history(history, output_dir, model_name)
 
-        # Step 6: Evaluate model
+        # Step 7: Evaluate model
         metrics = evaluate_model(
             model, val_gen, class_names, output_dir, model_name
         )
 
-        # Step 7: Save all artifacts
+        # Step 8: Save all artifacts
         save_model_artifacts(
             model, class_names, history, metrics, output_dir, model_name
         )
 
-        # Step 8: Create zip package with model and augmented images
+        # Step 9: Create zip package with model, augmented, and transformed
         zip_path = create_training_zip(
             output_dir,
             args.augmented_dir,
+            transformed_dir,
             model_name,
             args.plant_type
         )

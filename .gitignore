@@ -5,6 +5,8 @@ augmented_apple/
 augmented_grape/
 transformations/
 predictions/
+transformed_apple/
+transformed_grape/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

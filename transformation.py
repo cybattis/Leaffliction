@@ -377,7 +377,11 @@ def main():
             for file in files:
                 if any(file.lower().endswith(ext) for ext in IMAGE_EXTENSIONS):
                     input_path = str(os.path.join(root, file))
-                    output_path = str(os.path.join(args.destination, file))
+                    # Preserve subdirectory structure
+                    rel_path = os.path.relpath(input_path, args.source)
+                    output_path = str(os.path.join(args.destination, rel_path))
+                    # Create subdirectory if it doesn't exist
+                    os.makedirs(os.path.dirname(output_path), exist_ok=True)
                     process_single_image(args, input_path, output_path)
 
     # Process single image
@@ -389,8 +393,18 @@ def main():
         if not os.path.exists(args.image):
             print(f"Error: Image file '{args.image}' not found!")
             exit(1)
+        
+        # Create visualization directory and output path for single image
+        viz_dir = "visualization"
+        os.makedirs(viz_dir, exist_ok=True)
+        
+        # Create output path in visualization folder
+        image_name = os.path.basename(args.image)
+        output_path = os.path.join(viz_dir, image_name)
+        
         print(f"Processing image: {args.image}")
-        process_single_image(args, args.image, "")
+        print(f"Output will be saved to: {viz_dir}/")
+        process_single_image(args, args.image, output_path)
 
 
 if __name__ == '__main__':
