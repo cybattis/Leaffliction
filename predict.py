@@ -5,12 +5,14 @@ import os
 import argparse
 import csv
 import json
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import cv2
+import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
@@ -435,6 +437,165 @@ def save_predictions_csv(results: Dict, output_path: str) -> None:
     print(f"\nPredictions saved to: {output_path}")
 
 
+def run_transformation_for_mask(image_path: str) -> Optional[str]:
+    """
+    Run transformation.py to generate binary mask for a single image.
+
+    Args:
+        image_path: Path to the input image.
+
+    Returns:
+        Path to the generated mask image, or None if failed.
+    """
+    try:
+        # Build the transformation command
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        transformation_script = os.path.join(script_dir, "transformation.py")
+
+        if not os.path.exists(transformation_script):
+            print(f"Error: transformation.py not found at "
+                  f"{transformation_script}")
+            return None
+
+        cmd = [
+            sys.executable,
+            transformation_script,
+            "-i", image_path,
+            "-m"  # Generate mask
+        ]
+
+        print("Generating binary mask...")
+        subprocess.run(
+            cmd,
+            check=True,
+            capture_output=True,
+            text=True
+        )
+
+        # Look for the generated mask file in visualization/
+        image_name = os.path.splitext(os.path.basename(image_path))[0]
+        mask_path = f"visualization/transformed_{image_name}_mask.jpg"
+        
+        if os.path.exists(mask_path):
+            return mask_path
+        else:
+            print(f"Mask file not found: {mask_path}")
+            return None
+
+    except subprocess.CalledProcessError as e:
+        print(f"Transformation failed with exit code {e.returncode}")
+        print(f"Error output: {e.stderr}")
+        return None
+    except Exception as e:
+        print(f"Error running transformation: {e}")
+        return None
+
+
+def create_side_by_side_visualization(
+    original_path: str,
+    mask_path: str,
+    predicted_class: str,
+    confidence: float,
+    output_path: str
+) -> None:
+    """
+    Create side-by-side visualization of original and binary mask with pred.
+
+    Args:
+        original_path: Path to original image.
+        mask_path: Path to binary mask image.
+        predicted_class: Predicted class name.
+        confidence: Prediction confidence.
+        output_path: Path to save the visualization.
+    """
+    # Load images
+    original = cv2.imread(original_path)
+    mask = cv2.imread(mask_path)
+
+    if original is None or mask is None:
+        print("Error: Could not load images for visualization")
+        return
+
+    # Convert BGR to RGB for matplotlib
+    original_rgb = cv2.cvtColor(original, cv2.COLOR_BGR2RGB)
+    mask_rgb = cv2.cvtColor(mask, cv2.COLOR_BGR2RGB)
+
+    # Create figure
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+    
+    # Display original image
+    ax1.imshow(original_rgb)
+    ax1.set_title('Original Image', fontsize=14, fontweight='bold')
+    ax1.axis('off')
+
+    # Display mask
+    ax2.imshow(mask_rgb)
+    ax2.set_title('Binary Mask', fontsize=14, fontweight='bold')
+    ax2.axis('off')
+
+    # Add main title with prediction
+    fig.suptitle('DL classification', fontsize=16, fontweight='bold', y=0.95)
+
+    # Add prediction text at the bottom
+    prediction_text = f"Class predicted: {predicted_class}"
+    fig.text(0.5, 0.02, prediction_text, ha='center', fontsize=14,
+             color='green', fontweight='bold')
+
+    # Save the visualization
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    
+    print(f"Side-by-side visualization saved to: {output_path}")
+
+
+def predict_single_image_with_visualization(
+    model: keras.Model,
+    image_path: str,
+    class_names: List[str]
+) -> None:
+    """
+    Predict on a single image and create side-by-side visualization.
+
+    Args:
+        model: Trained Keras model.
+        image_path: Path to the image.
+        class_names: List of class names.
+    """
+    print(f"\nProcessing single image: {image_path}")
+    
+    # Make prediction on original image
+    prediction = predict_single_image(model, image_path, class_names)
+    if prediction is None:
+        print("Failed to make prediction")
+        return
+
+    predicted_class, confidence, _ = prediction
+    print(f"Prediction: {predicted_class} ({confidence:.1%})")
+
+    # Generate binary mask using transformation.py
+    mask_path = run_transformation_for_mask(image_path)
+    if mask_path is None:
+        print("Failed to generate binary mask")
+        return
+
+    # Create output path for visualization
+    viz_dir = "visualization"
+    os.makedirs(viz_dir, exist_ok=True)
+    
+    image_name = os.path.splitext(os.path.basename(image_path))[0]
+    output_path = os.path.join(viz_dir, f"prediction_{image_name}.jpg")
+
+    # Create side-by-side visualization
+    create_side_by_side_visualization(
+        image_path,
+        mask_path,
+        predicted_class,
+        confidence,
+        output_path
+    )
+
+
 def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
@@ -442,16 +603,16 @@ def parse_arguments() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Predict on a folder using apple model
+  # Predict on a folder using apple model (auto-generates CSV)
   python predict.py leaves/images -m apple
 
-  # Predict on a folder using grape model
-  python predict.py test_images/ -m grape
+  # Predict on a single image with visualization
+  python predict.py -i image.jpg -m grape
 
   # Predict using a specific model file
   python predict.py images/ -m models/apple/apple_disease_model_best.keras
 
-  # Specify custom CSV filename
+  # Specify custom CSV filename for folder prediction
   python predict.py test_data/ -m apple --csv my_results.csv
         """
     )
@@ -459,7 +620,15 @@ Examples:
     parser.add_argument(
         "input",
         type=str,
-        help="Path to folder containing images"
+        nargs='?',
+        help="Path to folder containing images (or use -i for single image)"
+    )
+
+    parser.add_argument(
+        "-i", "--image",
+        type=str,
+        metavar="IMAGE_PATH",
+        help="Path to single image for visualization mode"
     )
 
     parser.add_argument(
@@ -489,19 +658,43 @@ def main() -> int:
     """Main entry point."""
     args = parse_arguments()
 
+    # Validate arguments
+    if not args.image and not args.input:
+        print("Error: Must specify either a folder path or use -i for "
+              "single image")
+        return 1
+    
+    if args.image and args.input:
+        print("Error: Cannot specify both folder and single image")
+        return 1
+
     try:
         # Load model
         model, class_names, class_indices, plant_type = load_model_and_labels(
             args.model
         )
 
-        input_path = Path(args.input)
+        # Single image visualization mode
+        if args.image:
+            image_path = Path(args.image)
+            if not image_path.exists():
+                print(f"Error: Image file not found: {image_path}")
+                return 1
+            if not image_path.suffix.lower() in IMAGE_EXTENSIONS:
+                print(f"Error: Unsupported image format: {image_path.suffix}")
+                return 1
+                
+            predict_single_image_with_visualization(
+                model, str(image_path), class_names
+            )
+            return 0
 
+        # Folder prediction mode
+        input_path = Path(args.input)
         if not input_path.is_dir():
             print(f"Error: Input must be a directory: {input_path}")
             return 1
 
-        # Folder prediction mode
         results = predict_folder(
             model,
             str(input_path),

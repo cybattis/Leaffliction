@@ -398,15 +398,15 @@ def main():
         if not os.path.exists(args.image):
             print(f"Error: Image file '{args.image}' not found!")
             exit(1)
-        
+
         # Create visualization directory and output path for single image
         viz_dir = "visualization"
         os.makedirs(viz_dir, exist_ok=True)
-        
+
         # Create output path in visualization folder
         image_name = os.path.basename(args.image)
         output_path = os.path.join(viz_dir, image_name)
-        
+
         print(f"Processing image: {args.image}")
         print(f"Output will be saved to: {viz_dir}/")
         process_single_image(args, args.image, output_path)

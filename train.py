@@ -220,7 +220,7 @@ def create_training_zip(
                   f"(directory not found: {transformed_dir})")
 
     zip_size_mb = os.path.getsize(zip_path) / (1024 * 1024)
-    print(f"\n✅ Training package created: {zip_path}")
+    print(f"\nTraining package created: {zip_path}")
     print(f"   Size: {zip_size_mb:.1f} MB")
 
     return zip_path
@@ -813,9 +813,9 @@ def main() -> int:
 
         # Check if target accuracy achieved
         if metrics['accuracy'] >= 0.90:
-            print("✅ Target accuracy (>90%) achieved!")
+            print("Target accuracy (>90%) achieved!")
         else:
-            print(f"⚠️  Accuracy {metrics['accuracy']:.1%} below 90% target.")
+            print(f" Accuracy {metrics['accuracy']:.1%} below 90% target.")
 
         return 0
 
