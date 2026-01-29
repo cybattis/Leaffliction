@@ -7,6 +7,8 @@ transformations/
 predictions/
 transformed_apple/
 transformed_grape/
+models/
+leaves/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
