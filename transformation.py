@@ -10,7 +10,11 @@ import matplotlib.pyplot as plt
 import cv2
 
 from plantcv import plantcv as pcv
+from plantcv.plantcv import outputs
+
 matplotlib.use('Agg')
+
+IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.webp'}
 
 
 def apply_morphological_cleaning(mask, opening_size=5, closing_size=7):
@@ -99,6 +103,9 @@ def object_analyse(img, mask):
         # Fallback for older/different versions if needed, or use quick_filter
         kept_mask = pcv.roi.quick_filter(mask=mask, roi=roi)
 
+    pcv.params.line_thickness = 2
+    pcv.params.font = cv2.FONT_HERSHEY_SIMPLEX
+    pcv.params.sample_label = ""
     analysis_image = pcv.analyze.size(img=img, labeled_mask=kept_mask)
     return analysis_image
 
@@ -163,7 +170,7 @@ def color_histogram_transform(img, mask, output_path):
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2Lab)
 
     # Create figure with 1 subplot
-    fig, ax = plt.subplots(figsize=(10, 8), dpi=80)
+    fig, ax = plt.subplots(figsize=(10, 8), dpi=60)
 
     # Calculate total non-zero pixels in mask for proportion
     total_pixels = cv2.countNonZero(mask) \
@@ -196,22 +203,31 @@ def color_histogram_transform(img, mask, output_path):
     ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
-    histogram_path = output_path.replace('.JPG', '_histogram.png')
-    print(f"Saved result to {histogram_path}")
-    plt.savefig(histogram_path)
+    print(f"Saved result to {output_path}")
+    plt.savefig(output_path)
     plt.close(fig)
 
 
-def process_single_image(settings, image_path, output_path):
+def process_single_image(settings, image_path: str, output_path: str):
     """Process a single image and display all 6 transformations"""
     # Preprocessing - Mask background
+    print(f"Processing image: {image_path}")
+
     original_img, _, _ = pcv.readimage(filename=image_path)
     if original_img is None:
         print(f"Error: Could not load image from {image_path}")
         return
 
-    print(f"Processing image: {image_path}")
     print(f"Image shape: {original_img.shape}")
+
+    file, ext = os.path.splitext(os.path.basename(image_path))
+    output_image_name = f"transformed_{file}{ext.lower()}"
+    histogram_image_name = f"transformed_{file}_histogram{ext.lower()}"
+    mask_image_name = f"transformed_{file}_mask{ext.lower()}"
+
+    output_path = os.path.join(os.path.dirname(output_path), output_image_name)
+    histogram_path = os.path.join(os.path.dirname(output_path), histogram_image_name)
+    mask_path = os.path.join(os.path.dirname(output_path), mask_image_name)
 
     # Preprocessing - Mask background
     hsv, mask, clean_mask, blurred_img = plant_mask(original_img)
@@ -220,6 +236,11 @@ def process_single_image(settings, image_path, output_path):
     only_plant = pcv.apply_mask(img=original_img,
                                 mask=clean_mask,
                                 mask_color='black')
+
+    if settings.mask:
+        cv2.imwrite(mask_path, only_plant)
+        print(f"Saved plant mask to {mask_path}")
+
     diseases_mask = mask_transform(only_plant)
     blur_img = gaussian_blur_transform(only_plant)
     obj_img = object_analyse(original_img, diseases_mask)
@@ -310,12 +331,15 @@ def process_single_image(settings, image_path, output_path):
             ax.axis('off')
 
         plt.tight_layout()
-        plt.savefig(output_path)
+
+        print(f"output_path: {output_path}")
+        plt.savefig(output_path, dpi=60)
         plt.close(fig)
 
-        color_histogram_transform(original_img, mask, output_path)
+        if not settings.zip:
+            print(f"Saved histogram result to {histogram_path}")
+            color_histogram_transform(original_img, mask, histogram_path)
 
-    print(f"Saved result to {output_path}")
     print("Transformation complete!")
 
 
@@ -329,6 +353,8 @@ def main():
     parser.add_argument('-dst', '--destination', type=str,
                         help='Path to destination directory')
     parser.add_argument('-d', '--debug', action='store_true')
+    parser.add_argument('-m', '--mask', action='store_true')
+    parser.add_argument('-z', '--zip', action='store_true')
     args = parser.parse_args()
 
     if args.image is None and args.source is None:
@@ -348,11 +374,12 @@ def main():
             exit(1)
         if not os.path.exists(args.destination):
             os.makedirs(args.destination)
-        for file in os.listdir(args.source):
-            output_filename = f"transformed_{os.path.basename(file)}"
-            output_path = os.path.join(args.destination, output_filename)
-            image_path = os.path.join(args.source, file)
-            process_single_image(args, image_path, output_path)
+        for root, _, files in os.walk(args.source):
+            for file in files:
+                if any(file.lower().endswith(ext) for ext in IMAGE_EXTENSIONS):
+                    input_path = str(os.path.join(root, file))
+                    output_path = str(os.path.join(args.destination, file))
+                    process_single_image(args, input_path, output_path)
 
     # Process single image
     if args.image is not None:
@@ -363,8 +390,8 @@ def main():
         if not os.path.exists(args.image):
             print(f"Error: Image file '{args.image}' not found!")
             exit(1)
-        output_path = f"transformed_{os.path.basename(args.image)}"
-        process_single_image(args, args.image, output_path)
+        print(f"Processing image: {args.image}")
+        process_single_image(args, args.image, "")
 
 
 if __name__ == '__main__':
