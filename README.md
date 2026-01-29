@@ -19,24 +19,28 @@ Analyzes the distribution of the dataset and generates pie charts and bar charts
 ```
 
 ### 2. Data Augmentation (`augmentation.py`)
-Balances the dataset by applying various augmentation techniques (Flip, Rotate, Skew, Shear, Crop, Distortion). Generates 6 types of augmented images for each input.
+Balances the dataset by applying various augmentation techniques (Flip, Rotate, Skew, Shear, Crop, Distortion).
 
 **Usage:**
 ```bash
-./augmentation.py <image_path>
+# Visualize augmentations for a single image
+./augmentation.py -v <image_path>
+
+# Generate augmented dataset for a specific plant type
+./augmentation.py <apple|grape>
 ```
-*   When run, it creates copies of the image with different augmentations.
-*   To balance the entire dataset, logic will be implemented to augment under-represented classes.
+*   The script calculates the required number of images to balance classes and generates them.
+*   Validation images (processed individually) are saved to `visualization/`.
 
 ### 3. Image Transformation (`transformation.py`)
-Applies feature extraction transformations to images, such as Gaussian blur, Masking, ROI extraction, etc.
+Applies feature extraction using **PlantCV** to isolate the leaf and analyze its properties. It generates visualizations for **8 different processing steps** (including Masking, ROI extraction, Object Analysis, Pseudolandmarks) and creates specific color histograms.
 
 **Usage:**
 ```bash
-# For a single image (displays 6 transformations)
-./transformation.py <image_path>
+# Process a single image (saves to visualization/ folder)
+./transformation.py -i <image_path>
 
-# For a directory (saves transformations)
+# Process an entire directory
 ./transformation.py -src <source_dir> -dst <destination_dir> [options]
 ```
 Use `-h` for help.
@@ -46,16 +50,21 @@ Trains a model to classify leaf diseases and predicts the disease for new images
 
 **Training:**
 ```bash
-./train.py <dataset_directory>
+./train.py <apple|grape>
 ```
+*   Running training automatically triggers the pipeline: Augmentation -> Transformation -> Training.
 *   Generates a model and saves it (along with augmented data/learnings) to a zip file.
 
 **Prediction:**
 ```bash
-./predict.py <image_path>
+# Predict all images in a folder
+./predict.py <folder_path> -m <model_name>
+
+# Predict a single image (creates visualization)
+./predict.py -i <image_path> -m <model_name>
 ```
-*   Loads the trained model and predicts the disease class for the input image.
-*   Displays the original image, transformed image, and the prediction.
+*   Loads the trained model and predicts the disease class.
+*   Single image prediction generates a side-by-side view with the binary mask.
 
 ## Requirements
 
