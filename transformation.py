@@ -210,14 +210,10 @@ def color_histogram_transform(img, mask, output_path):
 def process_single_image(settings, image_path: str, output_path: str):
     """Process a single image and display all 6 transformations"""
     # Preprocessing - Mask background
-    print(f"Processing image: {image_path}")
-
     original_img, _, _ = pcv.readimage(filename=image_path)
     if original_img is None:
         print(f"Error: Could not load image from {image_path}")
         return
-
-    print(f"Image shape: {original_img.shape}")
 
     file, ext = os.path.splitext(os.path.basename(image_path))
     output_image_name = f"transformed_{file}{ext.lower()}"
@@ -330,16 +326,12 @@ def process_single_image(settings, image_path: str, output_path: str):
             ax.axis('off')
 
         plt.tight_layout()
-
-        print(f"output_path: {output_path}")
         plt.savefig(output_path, dpi=60)
         plt.close(fig)
 
         if not settings.zip:
             print(f"Saved histogram result to {histogram_path}")
             color_histogram_transform(original_img, mask, histogram_path)
-
-    print("Transformation complete!")
 
 
 def main():
@@ -382,6 +374,7 @@ def main():
             for file in files:
                 if any(file.lower().endswith(ext) for ext in IMAGE_EXTENSIONS):
                     input_path = str(os.path.join(root, file))
+                    print(f"Processing image: {input_path}")
                     # Preserve subdirectory structure
                     rel_path = os.path.relpath(input_path, args.source)
                     output_path = str(os.path.join(args.destination, rel_path))
@@ -411,6 +404,7 @@ def main():
         print(f"Output will be saved to: {viz_dir}/")
         process_single_image(args, args.image, output_path)
 
+    print("Transformation complete!")
 
 if __name__ == '__main__':
     print("PlantCV ", pcv.__version__)
